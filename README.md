@@ -3,6 +3,7 @@ The functions implement copula-based endogeneity corrections using the least-squ
 - 2sCOPE is the estimator by Yang et al. (2024)
 - IMA is the estimator by Haschka (2024)
 - BWM is the estimator by Breitung et al. (2024)
+- JAMS is the estimator by Liengaard et al. (2024)
 - PANEL is the estimator by Haschka (2022)
 
 The functions for cross-sectional estimators are similar in terms of required arguments. In light of the current discussion in the literature on the estimation of the cumulative distribution function, 
@@ -10,7 +11,7 @@ all approaches considered in the literature are implemented and can be selected 
 - kde is the integral of a density estimator used in Park & Gupta (2012) and Haschka (2022)
 - ecdf is the empirical cumulative distribution function (ecdf) with replaced boundary proposed by Becker et al. (2022)
 - resc.ecdf is a rescaled ecdf proposed by Qian et al. (2024)
-- adj.ecdf is an adjusted ecdf proposed by Liengaard (2024)
+- adj.ecdf is an adjusted ecdf proposed by Liengaard et al. (2024)
 
 The required arguments should be specified as follows:
 - formula should be depvar ~ endog_var1 + endog_var2 + ... | exog_var1 + exog_var2 + ...
