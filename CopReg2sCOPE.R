@@ -506,8 +506,8 @@ CopReg2sCOPE <- function(formula, data, method, cdf, nboots = 199) {
 # resc.ecdf is a rescaled ecdf proposed by Qian et al. (2024)
 # adj.ecdf is an adjusted ecdf proposed by Liengaard (2024)
 #
-# CopRegPG returns a list of legth 2. First entry are estimates with standard
-# errors. Second entry are residuals.
+# CopReg2sCOPE returns a list of legth 2. First entry are estimates with 
+# standard errors. Second entry are residuals.
 
 
 ### REFERENCES
@@ -586,11 +586,11 @@ data1$lwage <- log(data1$wage)
 data1$experience_sq <- data1$experience^2
 
 mod2sCOPE1 <- CopReg2sCOPE(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
-                     data = data1, cdf = "ecdf", nboots = 19)
+                     data = data1, cdf = "ecdf")
 mod2sCOPE1[[1]]
 
 mod2sCOPE2 <- CopReg2sCOPE(formula = lwage ~ education + experience | experience_sq + parttime + smsa + ethnicity,
-                     data = data1, cdf = "ecdf", nboots = 19)
+                     data = data1, cdf = "ecdf")
 mod2sCOPE2[[1]]
 
 
@@ -608,14 +608,14 @@ dat1$lcompprice <- log(dat1$CompPrice)
 dat1 <- subset(dat1, is.finite(log(Sales)))
 
 mod2sCOPE1 <- CopReg2sCOPE(formula = lsales ~ lprice + lcompprice | ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US,
-                     data = dat1, cdf = "ecdf", nboots = 19)
+                     data = dat1, cdf = "ecdf")
 mod2sCOPE1[[1]]
 
 
 dat1$ShelveLoc_num <- as.numeric(dat1$ShelveLoc)
 
 mod2sCOPE2 <- CopReg2sCOPE(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + US,
-                     data = dat1, cdf = "ecdf", nboots = 19)
+                     data = dat1, cdf = "ecdf")
 mod2sCOPE2[[1]]
 
 

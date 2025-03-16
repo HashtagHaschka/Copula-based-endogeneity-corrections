@@ -582,11 +582,11 @@ data1$lwage <- log(data1$wage)
 data1$experience_sq <- data1$experience^2
 
 modBMW1 <- CopRegBMW(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
-                   data = data1, cdf = "ecdf", nboots = 19)
+                   data = data1, cdf = "ecdf")
 modBMW1[[1]]
 
 modBMW2 <- CopRegBMW(formula = lwage ~ education + experience | experience_sq + parttime + smsa + ethnicity,
-                   data = data1, cdf = "ecdf", nboots = 19)
+                   data = data1, cdf = "ecdf")
 modBMW2[[1]]
 
 
@@ -603,14 +603,14 @@ dat1$lcompprice <- log(dat1$CompPrice)
 dat1 <- subset(dat1, is.finite(log(Sales)))
 
 modBMW1 <- CopRegBMW(formula = lsales ~ lprice + lcompprice | ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US,
-                   data = dat1, cdf = "ecdf", nboots = 19)
+                   data = dat1, cdf = "ecdf")
 modBMW1[[1]]
 
 
 dat1$ShelveLoc_num <- as.numeric(dat1$ShelveLoc)
 
 modBMW2 <- CopRegBMW(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + US,
-                   data = dat1, cdf = "ecdf", nboots = 19)
+                   data = dat1, cdf = "ecdf")
 modBMW2[[1]]
 
 
