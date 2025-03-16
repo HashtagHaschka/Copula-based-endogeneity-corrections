@@ -15,11 +15,11 @@ all approaches considered in the literature are implemented and can be selected 
 
 REFERENCES
 
-Becker, J.-M., D. Proksch, and C. M. Ringle (2021). Revisiting Gaussian copulas to handle endogenous regressors. Journal of the Academy of Marketing Science 50, 46–66.
-Breitung, J., A. Mayer, and D. Wied (2024). Asymptotic properties of endogeneity corrections using nonlinear transformations. The Econometrics Journal 27 (3), 362–383.
-Haschka, R. E (2022). Handling endogenous regressors using copulas: A generalisation to linear panel models with fixed effects and correlated regressors. Journal of Marketing Research 59(4), 860–881.
-Haschka, R. E. (2024). Robustness of copula-correction models in causal analysis: Exploiting between-regressor correlation. IMA Journal of Management Mathematics 36 (1), 161–180.
-Liengaard, B. D., J.-M. Becker, M. Bennedsen, P. Heiler, L. N. Taylor, and C. M. Ringle (2024). Dealing with regression models’ endogeneity by means of an adjusted estimator for the Gaussian copula approach. Journal of the Academy of Marketing Science, 1–21.
-Park, S. and S. Gupta (2012). Handling endogenous regressors by joint estimation using copulas. Marketing Science 31 (4), 567–586.
-Qian, Y., A. Koschmann, and H. Xie (2024). A practical guide to endogeneity correction using copulas. NBER Working Paper. https://www.nber.org/system/files/workingpapers/w32231/w32231.pdf. 
-Yang, F., Y. Qian, and H. Xie (2024). Addressing endogeneity using a two-stage copula generated regressor approach. EXPRESS: Journal of Marketing Research
+- Becker, J.-M., D. Proksch, and C. M. Ringle (2021). Revisiting Gaussian copulas to handle endogenous regressors. Journal of the Academy of Marketing Science 50, 46–66.
+- Breitung, J., A. Mayer, and D. Wied (2024). Asymptotic properties of endogeneity corrections using nonlinear transformations. The Econometrics Journal 27 (3), 362–383.
+- Haschka, R. E (2022). Handling endogenous regressors using copulas: A generalisation to linear panel models with fixed effects and correlated regressors. Journal of Marketing Research 59(4), 860–881.
+- Haschka, R. E. (2024). Robustness of copula-correction models in causal analysis: Exploiting between-regressor correlation. IMA Journal of Management Mathematics 36 (1), 161–180.
+- Liengaard, B. D., J.-M. Becker, M. Bennedsen, P. Heiler, L. N. Taylor, and C. M. Ringle (2024). Dealing with regression models’ endogeneity by means of an adjusted estimator for the Gaussian copula approach. Journal of the Academy of Marketing Science, 1–21.
+- Park, S. and S. Gupta (2012). Handling endogenous regressors by joint estimation using copulas. Marketing Science 31 (4), 567–586.
+- Qian, Y., A. Koschmann, and H. Xie (2024). A practical guide to endogeneity correction using copulas. NBER Working Paper. https://www.nber.org/system/files/workingpapers/w32231/w32231.pdf. 
+- Yang, F., Y. Qian, and H. Xie (2024). Addressing endogeneity using a two-stage copula generated regressor approach. EXPRESS: Journal of Marketing Research
