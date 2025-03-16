@@ -5,7 +5,7 @@ The functions implement copula-based endogeneity corrections using the least-squ
 - BWM is the estimator by Breitung et al. (2024)
 - PANEL is the estimator by Haschka (2022)
 
-The functions for cross-sectional estiamtors are similar in terms of required arguments. In light of the current discussion in the literature on the estimation of the cumulative distribution function, 
+The functions for cross-sectional estimators are similar in terms of required arguments. In light of the current discussion in the literature on the estimation of the cumulative distribution function, 
 all approaches considered in the literature are implemented and can be selected via cdf = c("kde", "ecdf", "resc.ecdf", "adj.ecdf")
 - kde is the integral of a density estimator used in Park & Gupta (2012) and Haschka (2022)
 - ecdf is the empirical cumulative distribution function (ecdf) with replaced boundary proposed by Becker et al. (2022)
