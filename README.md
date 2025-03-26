@@ -10,7 +10,7 @@ The functions for cross-sectional estimators are similar in terms of required ar
 all approaches considered in the literature are implemented and can be selected via cdf = c("kde", "ecdf", "resc.ecdf", "adj.ecdf")
 - kde is the integral of a density estimator used in Park & Gupta (2012) and Haschka (2022)
 - ecdf is the empirical cumulative distribution function (ecdf) with replaced boundary proposed by Becker et al. (2022)
-- resc.ecdf is a rescaled ecdf proposed by Qian et al. (2024)
+- resc.ecdf is a rescaled ecdf proposed by Qian et al. (2024), used in Haschka (2024) and Yang et al. (2024)
 - adj.ecdf is an adjusted ecdf proposed by Liengaard et al. (2024)
 
 The required arguments should be specified as follows:
