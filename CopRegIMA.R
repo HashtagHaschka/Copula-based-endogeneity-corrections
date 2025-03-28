@@ -2,7 +2,6 @@
 pacman::p_load(
   nlme,
   dplyr,
-  ica,
   Matrix,
   copula,
   ks,
@@ -46,6 +45,7 @@ boots1 <- function(formula, data_cleaned, dependent_var, independent_vars,
   
   # endogenous regressor(s)
   if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
+  P1 <- as.matrix(P1)
   P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
   
   if (cdf == "kde") {
@@ -176,7 +176,7 @@ boots_IMA <- function(formula, data_cleaned, dependent_var, independent_P_vars,
 }
 
 # Haschka (2024) estimator
-CopRegIMA <- function(formula, data, method, cdf, nboots = 199) {
+CopRegIMA <- function(formula, data, cdf, nboots = 199) {
   
   ################################################################################
   
@@ -270,6 +270,7 @@ CopRegIMA <- function(formula, data, method, cdf, nboots = 199) {
     
     # endogenous regressor(s)
     if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
+    P1 <- as.matrix(P1)
     P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
     
     if (cdf == "kde") {

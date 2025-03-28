@@ -2,20 +2,12 @@
 pacman::p_load(
   nlme,
   dplyr,
-  ica,
   Matrix,
   copula,
   ks,
   pbapply
 )
 
-
-# auxiliary function
-clean_names <- function(names_vec) {
-  names_vec <- gsub("`", "", names_vec)
-  names_vec <- gsub("^as\\.factor\\((.*?)\\)", "\\1", names_vec)
-  return(names_vec)
-}
 
 # function for adj.ecdf
 pobs1 <- function (x, na.last = "keep", ties.method = eval(formals(rank)$ties.method),
@@ -54,6 +46,7 @@ boots1 <- function(formula, data_cleaned, dependent_var, independent_vars,
 
   # endogenous regressor(s)
   if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
+  P1 <- as.matrix(P1)
   P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
 
   if (cdf == "kde") {
@@ -417,6 +410,7 @@ CopRegJAMS <- function(formula, data, cdf, nboots = 199) {
 
     # endogenous regressor(s)
     if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
+    P1 <- as.matrix(P1)
     P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
 
     if (cdf == "kde") {
@@ -850,7 +844,7 @@ hist(CopRegJAMS3[[2]])
 
 
 CopRegJAMS4 <- CopRegJAMS(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal) + as.factor(store),
-                           data = dat1_Tropicana, cdf = "adj.ecdf", nboots = 3)
+                           data = dat1_Tropicana, cdf = "adj.ecdf")
 CopRegJAMS4[[1]]
 hist(CopRegJAMS4[[2]])
 
@@ -866,7 +860,7 @@ data1$lwage <- log(data1$wage)
 data1$experience_sq <- data1$experience^2
 
 modJAMS1 <- CopRegJAMS(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
-                           data = data1, cdf = "ecdf", nboots = 19)
+                           data = data1, cdf = "ecdf")
 modJAMS1[[1]]
 
 

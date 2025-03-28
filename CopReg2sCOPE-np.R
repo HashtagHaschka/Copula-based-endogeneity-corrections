@@ -3,24 +3,11 @@ pacman::p_load(
   nlme,
   dplyr,
   Matrix,
-  copula,
   ks,
-  pbapply
+  pbapply,
+  np
 )
 
-# function for adj.ecdf
-pobs1 <- function (x, na.last = "keep", ties.method = eval(formals(rank)$ties.method), 
-                   lower.tail = TRUE) {
-  ties.method <- match.arg(ties.method)
-  U <- if (!is.null(dim(x))) 
-    apply(x, 2, rank, na.last = na.last, ties.method = ties.method)*((nrow(x) - 1)/(nrow(x)^2)) + 1/(2*nrow(x))
-  else rank(x, na.last = na.last, ties.method = ties.method)*((length(x) - 1)/(length(x)^2)) + 1/(2*length(x))
-  if (inherits(x, "zoo")) 
-    attributes(U) <- attributes(x)
-  if (lower.tail) 
-    U
-  else 1 - U
-}
 
 # functions for bootstrapping
 boots1 <- function(formula, data_cleaned, dependent_var, independent_vars,
@@ -45,7 +32,6 @@ boots1 <- function(formula, data_cleaned, dependent_var, independent_vars,
   
   # endogenous regressor(s)
   if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
-  P1 <- as.matrix(P1)
   P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
   
   if (cdf == "kde") {
@@ -89,9 +75,9 @@ boots1 <- function(formula, data_cleaned, dependent_var, independent_vars,
   return(Estimates)
   
 }
-boots_PG <- function(formula, data_cleaned, dependent_var, independent_P_vars,
-                     independent_X_vars, has_intercept, X, cdf, design_matrix1,
-                     full_formula) {
+boots_np <- function(formula, data_cleaned, dependent_var, independent_P_vars,
+                     independent_X_vars, X, cdf, design_matrix1, regressors, 
+                     full_formula, has_intercept) {
   
   data <- data_cleaned
   
@@ -111,42 +97,31 @@ boots_PG <- function(formula, data_cleaned, dependent_var, independent_P_vars,
   full_matrix <- cbind(data_cleaned[[all.vars(full_formula)[1]]], design_matrix)
   colnames(full_matrix)[1] <- all.vars(full_formula)[1]
   
-  # endogenous regressor(s)
-  P1 <- design_matrix[, independent_P_vars, drop = FALSE]
-  P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
+  # conditional cdf estimation
+  P_star <- matrix(NA, nrow = nrow(data_cleaned), 
+                   ncol = length(independent_P_vars))
+  colnames(P_star) <- independent_P_vars
   
-  if (cdf == "kde") {
-    
-    for (i in 1:ncol(P1)) {
-      Fhat <- ks::kcde(P1[, i])
-      P_star1[, i] <- predict(Fhat, x = P1[, i])
-    }
-    
-  } else if (cdf == "resc.ecdf") {
-    
-    P_star1 <- apply(P1, 2, copula::pobs)
-    
-  } else if (cdf == "adj.ecdf") {
-    
-    P_star1 <- apply(P1, 2, pobs1)
-    
-  } else if (cdf == "ecdf") {
-    
-    ecdf0 <- apply(P1, 2, ecdf)
-    for (i in 1:ncol(P1)) {
-      Fhat <- ecdf0[[i]]
-      P_star1[, i] <- Fhat(P1[, i])
-      P_star1[P_star1[, i] == min(P_star1[, i]), i] <- 10e-7
-      P_star1[P_star1[, i] == max(P_star1[, i]), i] <- 1-10e-7
-    }
-    
+  if (has_intercept) { design_matrix <- design_matrix[, -1] } else { design_matrix <- design_matrix }
+  regressors <- setdiff(colnames(design_matrix), independent_P_vars)
+  regressors <- sapply(regressors, function(x) {
+    if (grepl("\\)", x)) paste0("`", x, "`") else x
+  })
+  
+  for (i in seq_along(independent_P_vars)) {
+    p_var <- independent_P_vars[i]
+    bw <- npcdistbw(ydat = as.data.frame(full_matrix)[p_var], 
+                    xdat = as.data.frame(full_matrix)[names(regressors)])
+    cdf1 <- npcdist(bws = bw)
+    P_star[, i] <- cdf1$condist
   }
   
   # rename columns of P_star matrix
-  colnames(P_star1) <- paste0(colnames(P1), "_cop")
+  colnames(P_star) <- paste0(independent_P_vars, "_cop")
+  P_star <- apply(P_star, 2, qnorm)
   
   # merge columns
-  est_matrix <- cbind(full_matrix, P_star1)
+  est_matrix <- cbind(full_matrix, P_star)
   
   # control function approach
   mod1 <- lm(as.formula(paste(dependent_var, "~ . -", dependent_var, "- 1")),
@@ -157,8 +132,8 @@ boots_PG <- function(formula, data_cleaned, dependent_var, independent_P_vars,
   
 }
 
-# Park & Gupta (2012) estimator
-CopRegPG <- function(formula, data, cdf, nboots = 199) {
+# Hu et. al. (2025) estimator
+CopReg2sCOPEnp <- function(formula, data, nboots = 3) {
   
   ################################################################################
   
@@ -167,8 +142,7 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
   if (is.data.frame(data) == FALSE) { stop("Argument data is not a data.frame object", call. = FALSE) }
   if (inherits(data, "data.table")) { stop("Argument data should not be a data.table.", call = FALSE) }
   if (is.numeric(nboots) == FALSE) { stop("Argument nboots is not numeric", call. = FALSE) }
-  if (!(cdf %in% c("kde", "resc.ecdf", "adj.ecdf", "ecdf"))) { stop("Invalid cdf Choose from: kde, ecdf, resc.ecdf, adj.ecdf", call. = FALSE) }
-  
+
   # seperate endogenous and exogenous regressor(s)
   f1 <- nlme::splitFormula(formula, sep = "|")
   
@@ -252,7 +226,6 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
     
     # endogenous regressor(s)
     if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
-    P1 <- as.matrix(P1)
     P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
     
     if (cdf == "kde") {
@@ -347,7 +320,8 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
     constant_vars <- sapply(data[variables], function(x) length(unique(x)) == 1)
     
     if (!all(numeric_vars)) {
-      stop("Only continuous variables can be endogenous. The following variables are not numeric: ", paste(variables[!numeric_vars], collapse = ", "))
+      stop("Only continuous variables can be endogenous. The following variables are not numeric: ", 
+           paste(variables[!numeric_vars], collapse = ", "))
     }
     
     if (any(constant_vars)) {
@@ -383,66 +357,61 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
     
     ############################################################################
     
-    # endogenous regressor(s)
-    P1 <- design_matrix[, independent_P_vars, drop = FALSE]
-    P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
+    P_star <- matrix(NA, nrow = nrow(data_cleaned), 
+                     ncol = length(independent_P_vars))
+    colnames(P_star) <- independent_P_vars
     
-    if (cdf == "kde") {
+    if (has_intercept) { design_matrix <- design_matrix[, -1] } else { design_matrix <- design_matrix }
+    regressors <- setdiff(colnames(design_matrix), independent_P_vars)
+    regressors <- sapply(regressors, function(x) {
+      if (grepl("\\)", x)) paste0("`", x, "`") else x
+    })
+    
+    for (i in seq_along(independent_P_vars)) {
+      p_var <- independent_P_vars[i]
       
-      for (i in 1:ncol(P1)) {
-        Fhat <- ks::kcde(P1[, i])
-        P_star1[, i] <- predict(Fhat, x = P1[, i])
-      }
+      print(paste("Computing cdf of endogenous regressor", paste(p_var), 
+                  "conditional on exogenous regressors", paste(names(regressors), collapse=", ")))
       
-    } else if (cdf == "resc.ecdf") {
-      
-      P_star1 <- apply(P1, 2, copula::pobs)
-      
-    } else if (cdf == "adj.ecdf") {
-      
-      P_star1 <- apply(P1, 2, pobs1)
-      
-    } else if (cdf == "ecdf") {
-      
-      ecdf0 <- apply(P1, 2, ecdf)
-      for (i in 1:ncol(P1)) {
-        Fhat <- ecdf0[[i]]
-        P_star1[, i] <- Fhat(P1[, i])
-        P_star1[P_star1[, i] == min(P_star1[, i]), i] <- 10e-7
-        P_star1[P_star1[, i] == max(P_star1[, i]), i] <- 1-10e-7
-      }
-      
+      bw <- npcdistbw(ydat = as.data.frame(full_matrix)[p_var], 
+                      xdat = as.data.frame(full_matrix)[names(regressors)])
+      cdf1 <- npcdist(bws = bw)
+      P_star[, i] <- cdf1$condist
     }
     
     # rename columns of P_star matrix
-    colnames(P_star1) <- paste0(colnames(P1), "_cop")
+    colnames(P_star) <- paste0(independent_P_vars, "_cop")
+    P_star <- apply(P_star, 2, qnorm)
     
     # merge columns
-    est_matrix <- cbind(full_matrix, P_star1)
+    est_matrix <- cbind(full_matrix, P_star)
     
     # control function approach
     mod1 <- lm(as.formula(paste(dependent_var, "~ . -", 
-                                dependent_var, "- 1")), 
+                                dependent_var, "- 1")),
                data = as.data.frame(est_matrix))
     
     Estimates <- mod1$coefficients
     
     # obtain residuals
     beta <- Estimates[!grepl("_cop", names(Estimates))]
-    fitted_values <- design_matrix %*% beta
+    if (has_intercept) { fitted_values <- cbind(rep(1, nrow(design_matrix)), 
+                                                design_matrix) %*% beta } else {
+                                                  fitted_values <- design_matrix %*% beta }
     residuals_manual <- est_matrix[, dependent_var] - fitted_values
     
     # Bootstrapping
     print("Estimation done. Calculating bootstrap standard errors")
     trapped <- pbsapply(1:nboots, 
-                        function(i) boots_PG(formula = formula,
+                        function(i) boots_np(formula = formula,
                                              data_cleaned = data_cleaned,
                                              dependent_var = dependent_var,
                                              independent_P_vars = independent_P_vars,
                                              independent_X_vars = independent_X_vars,
-                                             has_intercept = has_intercept,
                                              cdf = cdf, design_matrix1 = design_matrix,
-                                             full_formula = full_formula, X = i))
+                                             regressors = regressors, X = i,
+                                             full_formula = full_formula,
+                                             has_intercept))
     ses <- apply(trapped, 1, sd)
     
     Estimates1 <- cbind(Estimates, ses)
@@ -456,44 +425,22 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
 
 
 # This function implements the copula-based endogeneity correction by 
-# Park & Gupta (2012) using the least-squares-based correction function 
+# Hu et. al. (2025) using the least-squares-based correction function 
 # approach.
 #
 # formula = depvar ~ endog_var1 + endog_var2 + ... | exog_var1 + exog_var2 + ...
 #
 # data = as.data.frame(datset)
 #
-# cdf = c("kde", "ecdf", "resc.ecdf", "adj.ecdf")
-# kde is the integral of a density estimator used in Park & Gupta (2012) and Haschka (2022)
-# ecdf is the empirical cumulative distribution function (ecdf) with replaced boundary proposed by Becker et al. (2022)
-# resc.ecdf is a rescaled ecdf proposed by Qian et al. (2024)
-# adj.ecdf is an adjusted ecdf proposed by Liengaard (2024)
-#
-# CopRegPG returns a list of legth 2. First entry are estimates with standard
-# errors. Second entry are residuals.
+# CopReg2sCOPEnp returns a list of legth 2. First entry are estimates with 
+# standard errors. Second entry are residuals.
 
 
 ### REFERENCES
 
-# Becker, J.-M., D. Proksch, and C. M. Ringle (2021). Revisiting Gaussian 
-# copulas to handle endogenous regressors. Journal of the Academy of Marketing 
-# Science 50, 46–66.
-#
-# Haschka, R. E (2022). Handling endogenous regressors using copulas: A 
-# generalisation to linear panel models with fixed effects and correlated 
-# regressors. Journal of Marketing Research 59(4), 860–881.
-#
-# Liengaard, B. D., J.-M. Becker, M. Bennedsen, P. Heiler, L. N. Taylor, and 
-# C. M. Ringle (2024). Dealing with regression models’ endogeneity by means of 
-# an adjusted estimator for the Gaussian copula approach. Journal of the 
-# Academy of Marketing Science, 1–21.
-#
-# Park, S. and S. Gupta (2012). Handling endogenous regressors by joint 
-# estimation using copulas. Marketing Science 31 (4), 567–586.
-#
-# Qian, Y., A. Koschmann, and H. Xie (2024). A practical guide to endogeneity 
-# correction using copulas. NBER Working Paper.
-# https://www.nber.org/system/files/workingpapers/w32231/w32231.pdf.
+# Hu, X., Qian, Y., A., and H. Xie (2025). Correcting endogeneity via 
+# instrument-free two-stage nonparametric copula control functions
+# http://www.nber.org/papers/w33607
 
 
 
@@ -510,28 +457,28 @@ dat1_Tropicana <- dat1 %>% filter(brand == 4)
 dat1_Tropicana <- dat1_Tropicana %>%
   mutate(across(starts_with("price"), log))
 
-modPG1 <- CopRegPG(formula = logmove ~ price4 | price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10,
-                   data = dat1_Tropicana, cdf = "kde")
-modPG1[[1]]
-hist(modPG1[[2]])
+mod2sCOPEnp1 <- CopReg2sCOPEnp(formula = logmove ~ price4 | price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10,
+                           data = dat1_Tropicana)
+mod2sCOPEnp1[[1]]
+hist(mod2sCOPEnp1[[2]])
 
 
-modPG2 <- CopRegPG(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10,
-                   data = dat1_Tropicana, cdf = "kde")
-modPG2[[1]]
-hist(modPG2[[2]])
+mod2sCOPEnp2 <- CopReg2sCOPEnp(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10,
+                               data = dat1_Tropicana)
+mod2sCOPEnp2[[1]]
+hist(mod2sCOPEnp2[[2]])
 
 
-modPG3 <- CopRegPG(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal),
-                   data = dat1_Tropicana, cdf = "kde")
-modPG3[[1]]
-hist(modPG3[[2]])
+mod2sCOPEnp3 <- CopReg2sCOPEnp(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal),
+                               data = dat1_Tropicana)
+mod2sCOPEnp3[[1]]
+hist(mod2sCOPEnp3[[2]])
 
 
-modPG4 <- CopRegPG(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal) + as.factor(store),
-                   data = dat1_Tropicana, cdf = "kde")
-modPG4[[1]]
-hist(modPG4[[2]])
+mod2sCOPEnp4 <- CopReg2sCOPEnp(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal) + as.factor(store),
+                               data = dat1_Tropicana)
+mod2sCOPEnp4[[1]]
+hist(mod2sCOPEnp4[[2]])
 
 
 
@@ -544,13 +491,13 @@ data1 <- CPS1988
 data1$lwage <- log(data1$wage)
 data1$experience_sq <- data1$experience^2
 
-modPG1 <- CopRegPG(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
-                 data = data1, cdf = "kde")
-modPG1[[1]]
+mod2sCOPEnp1 <- CopReg2sCOPEnp(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
+                     data = data1)
+mod2sCOPEnp1[[1]]
 
-modPG2 <- CopRegPG(formula = lwage ~ education + experience | experience_sq + parttime + smsa + ethnicity,
-                   data = data1, cdf = "kde")
-modPG2[[1]]
+mod2sCOPEnp2 <- CopReg2sCOPEnp(formula = lwage ~ education + experience | experience_sq + as.factor(parttime) + smsa + ethnicity,
+                               data = data1)
+mod2sCOPEnp2[[1]]
 
 
 
@@ -566,17 +513,16 @@ dat1$lprice <- log(dat1$Price)
 dat1$lcompprice <- log(dat1$CompPrice)
 dat1 <- subset(dat1, is.finite(log(Sales)))
 
-modPG1 <- CopRegPG(formula = lsales ~ lprice + lcompprice | ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US,
-                   data = dat1, cdf = "kde")
-modPG1[[1]]
+mod2sCOPEnp1 <- CopReg2sCOPEnp(formula = lsales ~ lprice + lcompprice | ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US,
+                     data = dat1)
+mod2sCOPEnp1[[1]]
 
 
 dat1$ShelveLoc_num <- as.numeric(dat1$ShelveLoc)
 
-modPG2 <- CopRegPG(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + as.factor(US),
-                   data = dat1, cdf = "kde")
-modPG2[[1]]
-
+mod2sCOPEnp1 <- CopReg2sCOPEnp(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + US,
+                     data = dat1, cdf = "ecdf")
+mod2sCOPE2[[1]]
 
 
 

@@ -2,7 +2,6 @@
 pacman::p_load(
   nlme,
   dplyr,
-  ica,
   Matrix,
   copula,
   ks,
@@ -46,6 +45,7 @@ boots1 <- function(formula, data_cleaned, dependent_var, independent_vars,
   
   # endogenous regressor(s)
   if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
+  P1 <- as.matrix(P1)
   P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
   
   if (cdf == "kde") {
@@ -176,7 +176,7 @@ boots_2sCOPE <- function(formula, data_cleaned, dependent_var, independent_P_var
 }
 
 # Yang et. al. (2024) estimator
-CopReg2sCOPE <- function(formula, data, method, cdf, nboots = 199) {
+CopReg2sCOPE <- function(formula, data, cdf, nboots = 199) {
   
   ################################################################################
   
@@ -270,6 +270,7 @@ CopReg2sCOPE <- function(formula, data, method, cdf, nboots = 199) {
     
     # endogenous regressor(s)
     if (has_intercept) { P1 <- design_matrix[, -1] } else { P1 <- design_matrix }
+    P1 <- as.matrix(P1)
     P_star1 <- matrix(NA, nrow = nrow(P1), ncol = ncol(P1))
     
     if (cdf == "kde") {
@@ -551,7 +552,7 @@ dat1_Tropicana <- dat1 %>% filter(brand == 4)
 dat1_Tropicana <- dat1_Tropicana %>%
   mutate(across(starts_with("price"), log))
 
-mod2sCOPE1 <- CopReg2sCOPE(formula = logmove ~ price4 | price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10,
+mod2sCOPE1 <- CopReg2sCOPE(formula = logmove ~ price4,
                            data = dat1_Tropicana, cdf = "ecdf")
 mod2sCOPE1[[1]]
 hist(mod2sCOPE1[[2]])
