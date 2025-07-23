@@ -284,6 +284,7 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
     
     # rename columns of P_star matrix
     colnames(P_star1) <- paste0(colnames(P1), "_cop")
+    P_star1 <- apply(P_star1, 2, qnorm)
     
     # merge columns
     est_matrix <- cbind(full_matrix, P_star1)
@@ -416,6 +417,7 @@ CopRegPG <- function(formula, data, cdf, nboots = 199) {
     
     # rename columns of P_star matrix
     colnames(P_star1) <- paste0(colnames(P1), "_cop")
+    P_star1 <- apply(P_star1, 2, qnorm)
     
     # merge columns
     est_matrix <- cbind(full_matrix, P_star1)
