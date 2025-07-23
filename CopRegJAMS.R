@@ -216,7 +216,8 @@ boots_JAMS2 <- function(formula, data_cleaned, dependent_var, independent_P_vars
             any(sapply(subdat1[independent_P_vars], function(col) length(unique(col)) > 1))) {
           
           subdat2 <- subdat1[, setdiff(c(independent_P_vars, independent_X_vars), factor_vars)]
-          subdat2 <- as.matrix(subdat2[, sapply(subdat2, function(x) length(unique(x)) > 1)])
+          subdat2 <- as.matrix(subdat2)
+          subdat2 <- subdat2[, apply(subdat2, 2, function(x) length(unique(x)) > 1), drop = FALSE]
           
           P_star1 <- matrix(NA, nrow = nrow(subdat2), ncol = ncol(subdat2))
           
@@ -649,8 +650,9 @@ CopRegJAMS <- function(formula, data, cdf, nboots = 199) {
               any(sapply(subdat1[independent_P_vars], function(col) length(unique(col)) > 1))) {
             
             subdat2 <- subdat1[, setdiff(c(independent_P_vars, independent_X_vars), factor_vars)]
-            subdat2 <- as.matrix(subdat2[, sapply(subdat2, function(x) length(unique(x)) > 1)])
-
+            subdat2 <- as.matrix(subdat2)
+            subdat2 <- subdat2[, apply(subdat2, 2, function(x) length(unique(x)) > 1), drop = FALSE]
+            
             P_star1 <- matrix(NA, nrow = nrow(subdat2), ncol = ncol(subdat2))
 
             if (cdf == "kde") {
