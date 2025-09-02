@@ -9,7 +9,7 @@ library(pbapply)
 
 
 # sample size and true coefficients
-N <- 100
+N <- 1000
 coeffs <- c(2, -4, 6)
 sig2 <- 5
 
@@ -477,6 +477,7 @@ summary(chain1[, (7 + 2*N) + 3])
 hist(chain1[, (7 + 2*N) + 3])
 plot.ts(chain1[, (7 + 2*N) + 3])
 acf(chain1[, (7 + 2*N) + 3])
+
 
 
 
