@@ -6,7 +6,7 @@ The functions implement copula-based endogeneity corrections using the least-squ
 - BWM is the estimator by Breitung et al. (2024)
 - JAMS is the estimator by Liengaard et al. (2025)
 - PANEL is the estimator by Haschka (2022)
-- BAYES is the estimator by Haschka (2022b)
+- BAYES is the estimator by Haschka (2025)
 
 The functions for cross-sectional estimators are similar in terms of required arguments. In light of the current discussion in the literature on the estimation of the cumulative distribution function, 
 all approaches considered in the literature are implemented and can be selected via cdf = c("kde", "ecdf", "resc.ecdf", "adj.ecdf")
@@ -38,7 +38,7 @@ REFERENCES
 - Becker, J.-M., D. Proksch, and C. M. Ringle (2021). Revisiting Gaussian copulas to handle endogenous regressors. Journal of the Academy of Marketing Science 50, 46–66.
 - Breitung, J., A. Mayer, and D. Wied (2024). Asymptotic properties of endogeneity corrections using nonlinear transformations. The Econometrics Journal 27 (3), 362–383.
 - Haschka, R. E (2022). Handling endogenous regressors using copulas: A generalisation to linear panel models with fixed effects and correlated regressors. Journal of Marketing Research 59(4), 860–881.
-- Haschka, R. E. (2022b). Bayesian Inference for Joint Estimation Models Using Copulas to Handle Endogenous Regressors. https://ssrn.com/abstract=4235194 
+- Haschka, R. E. (2025). Bayesian Inference for Joint Estimation Models Using Copulas to Handle Endogenous Regressors. Oxford Bulletin of Economics and Statistics 0, 1–16.
 - Haschka, R. E. (2024). Robustness of copula-correction models in causal analysis: Exploiting between-regressor correlation. IMA Journal of Management Mathematics 36 (1), 161–180.
 - Hu, X., Qian, Y., A., and H. Xie (2025). Correcting endogeneity via instrument-free two-stage nonparametric copula control functions. http://www.nber.org/papers/w33607
 - Liengaard, B. D., J.-M. Becker, M. Bennedsen, P. Heiler, L. N. Taylor, and C. M. Ringle (2025). Dealing with regression models’ endogeneity by means of an adjusted estimator for the Gaussian copula approach. Journal of the Academy of Marketing Science 53, 279–299.
