@@ -12,7 +12,7 @@ The functions for cross-sectional estimators are similar in terms of required ar
 all approaches considered in the literature are implemented and can be selected via cdf = c("kde", "ecdf", "resc.ecdf", "adj.ecdf")
 - kde is the integral of a density estimator used in Park & Gupta (2012) and Haschka (2022)
 - ecdf is the empirical cumulative distribution function (ecdf) with replaced boundary proposed by Becker et al. (2022)
-- resc.ecdf is a rescaled ecdf proposed by Qian et al. (2025), used in Haschka (2024) and Yang et al. (2024)
+- resc.ecdf is a rescaled ecdf proposed by Qian et al. (2025), used in Haschka (2024) and Yang et al. (2025)
 - adj.ecdf is an adjusted ecdf proposed by Liengaard et al. (2024)
 
 The required arguments should be specified as follows:
@@ -44,4 +44,4 @@ REFERENCES
 - Liengaard, B. D., J.-M. Becker, M. Bennedsen, P. Heiler, L. N. Taylor, and C. M. Ringle (2025). Dealing with regression models’ endogeneity by means of an adjusted estimator for the Gaussian copula approach. Journal of the Academy of Marketing Science 53, 279–299.
 - Park, S. and S. Gupta (2012). Handling endogenous regressors by joint estimation using copulas. Marketing Science 31 (4), 567–586.
 - Qian, Y., A. Koschmann, and H. Xie (2025). A practical guide to endogeneity correction using copulas. Journal of Marketing.
-- Yang, F., Y. Qian, and H. Xie (2025). Addressing endogeneity using a two-stage copula generated regressor approach. Journal of Marketing Research 62(4), 601-623.
+- , F., Y. Qian, and H. Xie (2025). Addressing endogeneity using a two-stage copula generated regressor approach. Journal of Marketing Research 62(4), 601-623.
