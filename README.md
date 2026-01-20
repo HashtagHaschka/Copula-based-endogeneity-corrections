@@ -22,6 +22,7 @@ The required arguments should be specified as follows:
 - dummy variables can be modelled using as.factor(exog_var1), etc.
 - data should be a data.frame
 - Example: CopRegJAMS(formula = Y ~ endog1 + endog2 + endog3 | exog1 + exog2 + as.factor(exog3), cdf = "adj.ecdf", data = data1)
+- The file 1EXAMPLE contains examples with freely-available datasets
 
 For the copula panel regression model:
 - dummy variables must be time-varying because it is a fixed-effects model
