@@ -1,0 +1,124 @@
+# =============================================
+# Copula-Based Endogeneity Corrections
+# =============================================
+# https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
+# =============================================
+
+
+# Load the functions
+source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopReg2sCOPE-np_workshop.R")
+source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopReg2sCOPE_workshop.R")
+source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegBMW_workshop.R")
+source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegIMA_workshop.R")
+source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegJAMS_workshop.R")
+source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegPG_workshop.R")
+
+
+# 1. Example
+# Estimate price elasticity for orange juice. This is the Dominick's dataset. We
+# have aggregated scanner data for several brands of orange juice. Repeated store
+# observations on weekly basis. E.g., How many units of orange juice of brand X 
+# were sold, at what price, in which store, and in which week.
+
+library(bayesm) # Data is contained in this package
+
+data("orangeJuice")
+dat1 <- orangeJuice[[1]]
+?orangeJuice # Information about the data is given here
+
+dat1_Tropicana <- dat1 %>% filter(brand == 4) # consider the demand for Tropicana 64 oz
+dat1_Tropicana <- dat1_Tropicana %>%
+  mutate(across(starts_with("price"), log)) # logarithmise all price variables
+
+
+# Use the 2sCOPE estimator and regress: log(sales) = alpha + beta*log(price) + e,
+# where log(price) is endogenous
+mod2sCOPE1 <- CopReg2sCOPE(formula = logmove ~ price4,
+                           data = dat1_Tropicana, cdf = "ecdf")
+mod2sCOPE1[[1]] # Regression output
+hist(mod2sCOPE1[[2]]) # Residual distribution
+
+
+# Next, consider price for other brands to estimate cross-price elasticities, i.e., 
+# regress log(sales) = alpha + beta1*log(price) + beta2*log(price1) + ... + beta12*log(price11) + e,
+# where price1, ..., price11 are the prices of the other brands, see description in via ?orangeJuice.
+# All price variables are endogenous
+mod2sCOPE2 <- CopReg2sCOPE(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 + price11,
+                           data = dat1_Tropicana, cdf = "ecdf")
+mod2sCOPE2[[1]] # Regression output
+hist(mod2sCOPE2[[2]]) # Residual distribution
+
+
+# Next, we model all cross-prices as exogenous, specified using |
+mod2sCOPE3 <- CopReg2sCOPE(formula = logmove ~ price4 | price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 + price11,
+                           data = dat1_Tropicana, cdf = "ecdf")
+mod2sCOPE3[[1]] # Regression output
+hist(mod2sCOPE3[[2]]) # Residual distribution
+
+
+# We consider feature advertising (if the product Tropicana 64 oz is featured)
+# in the store's weekly flyer, and in-store display. All cross-price variables are
+# again endogenous - exogenous variables come after |
+mod2sCOPE4 <- CopReg2sCOPE(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal),
+                           data = dat1_Tropicana, cdf = "ecdf")
+mod2sCOPE4[[1]]
+hist(mod2sCOPE4[[2]])
+
+
+# Finally, we also consider store fixed effects.
+mod2sCOPE5 <- CopReg2sCOPE(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal) + as.factor(store),
+                           data = dat1_Tropicana, cdf = "ecdf")
+mod2sCOPE5[[1]]
+hist(mod2sCOPE5[[2]])
+
+
+
+# 2. Example
+# Cross-section data originating from the March 1988 Current Population Survey 
+# by the US Census Bureau. Individual-specific observations on wages, years of 
+# education, years of experience, etc.
+
+library(AER)
+
+data1 <- data("CPS1988")
+data1 <- CPS1988
+data1$lwage <- log(data1$wage) # generate log wages
+data1$experience_sq <- data1$experience^2 # consider squared work experience
+?CPS1988 # details on dataset are given here
+
+
+mod2sCOPE1 <- CopReg2sCOPE(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
+                           data = data1, cdf = "ecdf")
+mod2sCOPE1[[1]]
+
+mod2sCOPE2 <- CopReg2sCOPE(formula = lwage ~ education + experience | experience_sq + parttime + smsa + ethnicity,
+                           data = data1, cdf = "ecdf")
+mod2sCOPE2[[1]]
+
+
+
+# 3. Example
+# This is a simulated data set containing sales of child car seats at 400 
+# different stores.
+
+library(ISLR)
+
+data("Carseats")
+dat1 <- Carseats
+?Carseats # details are given here
+
+dat1$lsales <- log(dat1$Sales)
+dat1$lprice <- log(dat1$Price)
+dat1$lcompprice <- log(dat1$CompPrice)
+dat1 <- subset(dat1, is.finite(log(Sales)))
+
+mod2sCOPE1 <- CopReg2sCOPE(formula = lsales ~ lprice + lcompprice | ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US,
+                           data = dat1, cdf = "ecdf")
+mod2sCOPE1[[1]]
+
+
+dat1$ShelveLoc_num <- as.numeric(dat1$ShelveLoc)
+
+mod2sCOPE2 <- CopReg2sCOPE(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + US,
+                           data = dat1, cdf = "ecdf")
+mod2sCOPE2[[1]]
