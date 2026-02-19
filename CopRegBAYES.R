@@ -105,9 +105,9 @@ post2 <- function(param, W, data) {
   
   
   t1 <- sum(dCopula(copula = normalCopula(param = P2p(Phi1), dim = 3, 
-                                           dispstr = "un"), u = X_hat, 
-                     log = TRUE)) + 
-           sum(dnorm(mean = 0, sd = sqrt(s), x = e, log = TRUE)) +
+                                          dispstr = "un"), u = X_hat, 
+                    log = TRUE)) + 
+    sum(dnorm(mean = 0, sd = sqrt(s), x = e, log = TRUE)) +
     sum(LaplacesDemon::dcat(x = c(table(data$z)), p = data$z1g, log = TRUE)) +
     sum(LaplacesDemon::dcat(x = c(table(data$x)), p = data$x1g, log = TRUE)) +
     dinvwishart(Sigma = W, nu = 3, S = diag(3), log = TRUE) + 
@@ -138,13 +138,13 @@ proposals1 <- function(param, W1, data) {
   a <- param[1]
   b1 <- param[2]
   b2 <- param[3]
-
+  
   P <- param[4]*solve(t(cbind(data$const, qnorm(data$z1), qnorm(data$x1))) %*% cbind(data$const, qnorm(data$z1), qnorm(data$x1)))
   
   # Proposals for beta
   p1 <- rmvnorm(n = 1, mean = c(a, b1, b2), sigma = P)
   # p1 <- rmvt(n = 1, delta = c(a, b1, b2), sigma = P, df = 1)
-
+  
   return(p1)
   
 }
@@ -184,11 +184,11 @@ d_proposals <- function(param, param1, W1, data) {
   a <- param[1]
   b1 <- param[2]
   b2 <- param[3]
-
+  
   a0 <- param1[1]
   b01 <- param1[2]
   b02 <- param1[3]
-
+  
   P01 <- sapply(X = 1:N, FUN = aux1, param = param1, W1 = W1, data = data)
   
   p2 <- invgamma::dinvgamma(x = param[4], shape = N/2, log = TRUE,
@@ -213,6 +213,11 @@ metropolis_Gibbs_MCMC1 <- function(startvalue, iterations, data) {
   
   for (i in 1:iterations) {
     
+    if (i %% 10 == 0) {
+      cat("Iteration:", i,
+          "| beta =", round(chain[i,1:3], 3),
+          "| sigma2 =", round(chain[i,4], 3), "\n")
+    }
     
     ################################# Proposals ################################
     
@@ -272,18 +277,21 @@ metropolis_Gibbs_MCMC1 <- function(startvalue, iterations, data) {
     
     ############################ Gibbs step Wishart ############################
     
-    X01 <- matrix(ncol = 3, nrow = N, 
-                  data = c(qnorm(dat1$z1),
-                           qnorm(dat1$x1),
-                           qnorm(pnorm(dat1$y - chain[i+1, 1] - 
-                                         chain[i+1, 2]*dat1$z - chain[i+1, 3]*dat1$x, 
-                                       sd = sqrt(chain[i+1, 4])))))
+    Xi_latent <- cbind(
+      qnorm(dat1$z1),
+      qnorm(dat1$x1),
+      qnorm(pnorm(dat1$y - chain[i+1, 1] - 
+                    chain[i+1, 2]*dat1$z - 
+                    chain[i+1, 3]*dat1$x,
+                  sd = sqrt(chain[i+1, 4])))
+    )
     
-    W1 <- rinvwishart(nu = N + 3, S = diag(3) + t(X01)%*%X01)
+    C_half <- diag(sqrt(diag(W1)))          # diag(W^{t-1})^{1/2}
+    Xi_tilde <- Xi_latent %*% C_half        # scaled latent draws
     
     while (1 > 0) {
       
-      W1 <- rinvwishart(nu = N + 3, S = diag(3) + t(X01)%*%X01) 
+      W1 <- rinvwishart(nu = N + 3, S  = diag(3) + t(Xi_tilde) %*% Xi_tilde)
       W1[2, 3] <- 0
       W1[3, 2] <- 0
       
@@ -291,13 +299,10 @@ metropolis_Gibbs_MCMC1 <- function(startvalue, iterations, data) {
       
     }
     
-    W01 <- solve(sqrt(diag(W1))*diag(3))%*%W1%*%solve(sqrt(diag(W1))*diag(3))
+    D_inv_half <- diag(1 / sqrt(diag(W1)))
+    W01 <- D_inv_half %*% W1 %*% D_inv_half
     
     chain[i+1, 5:7] <- P2p(W01)
-    # chain[i+1, 5] <- cor(qnorm(pobs(X[, 2])), qnorm(pobs(X[, 3])))
-    # chain[i+1, 7] <- 0
-    # W1[2, 3] <- 0
-    # W1[3, 2] <- 0
     
     
     ########################### Gibbs step Dirichlet ###########################
@@ -477,7 +482,6 @@ summary(chain1[, (7 + 2*N) + 3])
 hist(chain1[, (7 + 2*N) + 3])
 plot.ts(chain1[, (7 + 2*N) + 3])
 acf(chain1[, (7 + 2*N) + 3])
-
 
 
 
