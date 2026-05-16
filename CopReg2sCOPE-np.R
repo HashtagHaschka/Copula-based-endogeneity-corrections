@@ -522,7 +522,7 @@ dat1$ShelveLoc_num <- as.numeric(dat1$ShelveLoc)
 
 mod2sCOPEnp1 <- CopReg2sCOPEnp(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + US,
                      data = dat1, cdf = "ecdf")
-mod2sCOPE2[[1]]
+mod2sCOPEnp1[[1]]
 
 
 
