@@ -22,12 +22,20 @@ JAMS), by maximum likelihood (PANEL), or by MCMC (BAYES).
 
 ## Getting started
 
-Download **`1EXAMPLES.R`** and run it. That is the only file you need: it reads
-the estimators straight from this repository.
+Download one file and run it. That is all: both scripts read the estimators
+straight from this repository, so there is nothing else to fetch and no working
+directory to set.
+
+* **`QUICKSTART.R`** — the short tour. One dataset, every estimator,
+  `summary()` and `validity()` throughout.
+* **`1EXAMPLES.R`** — the full reference. Three datasets, every argument of
+  every function spelled out, defaults included.
+
+Both begin with:
 
 ```r
 gh <- paste0("https://raw.githubusercontent.com/HashtagHaschka/",
-             "Copula-based-endogeneity-corrections/main/")
+             "Copula-based-endogeneity-corrections/functions/")
 
 for (f in c("Copreg_core.R",        # the core has to come first
             "Copreg_pg.R", "Copreg_2scope.R", "Copreg_ima.R",
