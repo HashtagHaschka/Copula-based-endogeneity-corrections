@@ -1,124 +1,1636 @@
-# =============================================
-# Copula-Based Endogeneity Corrections
-# =============================================
-# https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
-# =============================================
+## =============================================================================
+##  1EXAMPLES.R
+##
+##  Examples for the copula endogeneity corrections.
+##
+##  Every call below spells out every argument, defaults included, so that the
+##  full interface of each function is visible at the point of use.  Values
+##  that differ from the default are marked with a comment; everything
+##  unmarked is what the function would have used anyway.
+##
+##  Source order matters: the core first, then the estimators.
+## =============================================================================
+
+## -----------------------------------------------------------------------------
+##  Setup
+## -----------------------------------------------------------------------------
+##  This is the only file you need.  The estimators are read straight from
+##  GitHub, so there is nothing else to download and no working directory to
+##  set: run the block below and everything is in place.
+
+gh <- paste0("https://raw.githubusercontent.com/HashtagHaschka/",
+             "Copula-based-endogeneity-corrections/functions/")
+
+for (f in c("Copreg_core.R",        # the core has to come first
+            "Copreg_pg.R",
+            "Copreg_2scope.R",
+            "Copreg_ima.R",
+            "Copreg_jams.R",
+            "Copreg_bmw.R",
+            "Copreg_2scope_np.R",
+            "Copreg_panel.R",
+            "Copreg_bayes.R"))
+  source(paste0(gh, f))
+
+## The estimators themselves need Formula, and 2sCOPE-np additionally needs np.
+## The examples below use three data packages.
+need <- c("Formula",                 # required by every estimator
+          "np",                      # required by 2sCOPE-np only
+          "bayesm", "AER", "ISLR")   # the data used in the examples
+miss <- need[!vapply(need, requireNamespace, logical(1), quietly = TRUE)]
+if (length(miss) > 0L) install.packages(miss)
 
 
-# Load the functions
-source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopReg2sCOPE-np_workshop.R")
-source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopReg2sCOPE_workshop.R")
-source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegBMW_workshop.R")
-source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegIMA_workshop.R")
-source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegJAMS_workshop.R")
-source("https://raw.githubusercontent.com/HashtagHaschka/AOM-Workshop/functions/CopRegPG_workshop.R")
+## The interface at a glance
+## -------------------------
+##  CopRegPG      (formula, data, cdf, ties, nboots, subset, contrasts,
+##                 parallel, ncores, verbose)
+##  CopReg2sCOPE  (as PG)
+##  CopRegIMA     (as PG)
+##  CopRegBMW     (as PG)
+##  CopRegJAMS    (as PG, plus conditional)
+##  CopReg2sCOPEnp(formula, data, condition, groups, heterogeneous, demean,
+##                 bwmethod, bw.refit, nboots, subset, contrasts, parallel,
+##                 ncores, verbose, ...)
+##  CopRegPANEL   (formula, data, index, cdf, ties, intercept, nboots, method,
+##                 start, maxit, subset, contrasts, parallel, ncores, verbose)
+##  CopRegBAYES   (formula, data, iterations, burnin, thin, horseshoe,
+##                 prior.args, start, subset, contrasts, verbose)
+##  copreg        (formula, data, method, cdf, ...)
+##
+##  cdf defaults to the estimator's own paper: "kde.silverman" for Park &
+##  Gupta (2012), "rank.n" for 2sCOPE (Yang, Qian & Xie 2025) and for IMA
+##  (Haschka 2025), "ecdf.adj" for JAMS, "rank.n1" for BMW, "kde.plugin" for
+##  PANEL.  The seven choices are "kde.silverman", "kde.cv", "kde.plugin",
+##  "ecdf.fixed", "ecdf.adj", "rank.n" and "rank.n1".
+##
+##  Two estimators have no cdf and no ties.  2sCOPE-np builds its copula term
+##  from the conditional CDF of P given W, estimated nonparametrically, so
+##  there is no marginal CDF to choose; see section 5.  BAYES treats the
+##  marginal CDFs as parameters and replaces the bootstrap by a posterior, so
+##  it has no nboots either; see section 6.  PANEL is a separate model class
+##  needing an index; see section 7.
+##
+##  Extractors, section 8:
+##    summary(mod)   coefficients, endogeneity measure, diagnostics
+##    validity(mod)  the decision tree of Yang, Qian & Xie (2025, Fig. 2), the
+##                   boundary conditions of Becker, Proksch & Ringle (2022,
+##                   Fig. 8) and the ICON statistic
+##    residuals(mod) structural residuals xi = y - mu - P alpha - W beta
+##
+##  Nothing in the toolbox sets a seed at any point.
 
 
-# 1. Example
-# Estimate price elasticity for orange juice. This is the Dominick's dataset. We
-# have aggregated scanner data for several brands of orange juice. Repeated store
-# observations on weekly basis. E.g., How many units of orange juice of brand X 
-# were sold, at what price, in which store, and in which week.
+## =============================================================================
+##  1. Orange juice (Dominick's), Tropicana
+## =============================================================================
 
-library(bayesm) # Data is contained in this package
-
+library(bayesm)
 data("orangeJuice")
 dat1 <- orangeJuice[[1]]
-?orangeJuice # Information about the data is given here
 
-dat1_Tropicana <- dat1 %>% filter(brand == 4) # consider the demand for Tropicana 64 oz
-dat1_Tropicana <- dat1_Tropicana %>%
-  mutate(across(starts_with("price"), log)) # logarithmise all price variables
+dat1_Tropicana <- dat1[dat1$brand == 4, ]
+pcols <- grep("^price", names(dat1_Tropicana), value = TRUE)
+dat1_Tropicana[pcols] <- lapply(dat1_Tropicana[pcols], log)
 
-
-# Use the 2sCOPE estimator and regress: log(sales) = alpha + beta*log(price) + e,
-# where log(price) is endogenous
-mod2sCOPE1 <- CopReg2sCOPE(formula = logmove ~ price4,
-                           data = dat1_Tropicana, cdf = "ecdf")
-mod2sCOPE1[[1]] # Regression output
-hist(mod2sCOPE1[[2]]) # Residual distribution
+f1 <- logmove ~ price4 |
+  price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 +
+  price10 + feat + as.factor(deal)
 
 
-# Next, consider price for other brands to estimate cross-price elasticities, i.e., 
-# regress log(sales) = alpha + beta1*log(price) + beta2*log(price1) + ... + beta12*log(price11) + e,
-# where price1, ..., price11 are the prices of the other brands, see description in via ?orangeJuice.
-# All price variables are endogenous
-mod2sCOPE2 <- CopReg2sCOPE(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 + price11,
-                           data = dat1_Tropicana, cdf = "ecdf")
-mod2sCOPE2[[1]] # Regression output
-hist(mod2sCOPE2[[2]]) # Residual distribution
+## --- price4 endogenous, competing prices and promotion as controls -----------
+
+mod1 <- CopRegPG(formula   = f1,
+                 data      = dat1_Tropicana,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 199,
+                 subset    = NULL,
+                 contrasts = NULL,
+                 parallel  = FALSE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod1)
+validity(object = mod1, level = 0.05, power = 0.8)
+hist(residuals(object = mod1, type = "structural"), breaks = 40,
+     main = "mod1", xlab = expression(hat(xi)))
+
+mod2 <- CopReg2sCOPE(formula   = f1,
+                     data      = dat1_Tropicana,
+                     cdf       = "rank.n",
+                     ties      = "max",
+                     nboots    = 199,
+                     subset    = NULL,
+                     contrasts = NULL,
+                     parallel  = FALSE,
+                     ncores    = NULL,
+                     verbose   = interactive())
+summary(object = mod2)
+validity(object = mod2, level = 0.05, power = 0.8)
+hist(residuals(object = mod2, type = "structural"), breaks = 40,
+     main = "mod2", xlab = expression(hat(xi)))
+
+mod3 <- CopRegIMA(formula   = f1,
+                  data      = dat1_Tropicana,
+                  cdf       = "rank.n",
+                  ties      = "max",
+                  nboots    = 199,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = FALSE,
+                  ncores    = NULL,
+                  verbose   = interactive())
+summary(object = mod3)
+validity(object = mod3, level = 0.05, power = 0.8)
+
+## IMA differs from 2sCOPE only in that its first-stage regression carries no
+## intercept, so the two are usually very close; the gap widens the further the
+## transformed exogenous regressors sit from mean zero, for instance with
+## unbalanced dummies.
+
+mod4 <- CopRegBMW(formula   = f1,
+                  data      = dat1_Tropicana,
+                  cdf       = "rank.n1",
+                  ties      = "max",
+                  nboots    = 199,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = FALSE,
+                  ncores    = NULL,
+                  verbose   = interactive())
+summary(object = mod4)
+validity(object = mod4, level = 0.05, power = 0.8)
+
+## BMW inverts the order of the two operations: the first stage runs on the raw
+## variables and the rank transform is applied to its residuals, where 2sCOPE
+## transforms first and regresses the transformed variables on one another.
+## Two consequences show up in the output.  The identification requirement
+## falls on the first-stage residuals rather than on price4, so validity()
+## tests those; and Corollary 3.2 makes the textbook t statistic valid for
+## testing rho = 0, so summary() adds that Durbin-Hausman-Wu test next to the
+## bootstrap one.
+##
+## cdf is fixed here in a way it is not elsewhere: Proposition 3.1 is derived
+## for Rank/(n+1), so any other choice warns.
+
+mod5 <- CopRegJAMS(formula     = f1,
+                   data        = dat1_Tropicana,
+                   conditional = TRUE,
+                   cdf         = "ecdf.adj",
+                   ties        = "max",
+                   nboots      = 199,
+                   subset      = NULL,
+                   contrasts   = NULL,
+                   parallel    = FALSE,
+                   ncores      = NULL,
+                   verbose     = interactive())
+summary(object = mod5)
+validity(object = mod5, level = 0.05, power = 0.8)
+
+## JAMS estimates the copula structure separately per category of deal, so the
+## coefficient table shows price4_cop.z1 and price4_cop.z2.  summary() reports
+## a bootstrap Wald test of their joint significance and a second one asking
+## whether they differ across the categories.
+mod6 <- CopRegJAMS(formula     = f1,
+                   data        = dat1_Tropicana,
+                   conditional = FALSE,          # one common copula structure
+                   cdf         = "ecdf.adj",
+                   ties        = "max",
+                   nboots      = 199,
+                   subset      = NULL,
+                   contrasts   = NULL,
+                   parallel    = FALSE,
+                   ncores      = NULL,
+                   verbose     = interactive())
+summary(object = mod6)
+
+## 2sCOPE-np replaces the whole first stage by a nonparametric estimate of the
+## conditional CDF of price4 given the other prices, feature and deal.  It
+## makes the fewest assumptions of all methods here, and it costs the most: the
+## cross-validated bandwidth selection is O(n^2) and, following Section 2.5 of
+## the paper, it is repeated in every bootstrap replicate.  Conditioning on
+## eleven exogenous regressors at n = 9,649 is not a five minute job; the call
+## below therefore keeps the conditioning set small, which Section 3.1.3
+## recommends anyway.
+mod7 <- CopReg2sCOPEnp(formula       = logmove ~ price4 | price1 + price2 + feat,
+                       data          = dat1_Tropicana,
+                       condition     = NULL,
+                       groups        = NULL,
+                       heterogeneous = NULL,
+                       demean        = NULL,
+                       bwmethod      = "cv.ls",
+                       bw.refit      = TRUE,
+                       nboots        = 199,
+                       subset        = NULL,
+                       contrasts     = NULL,
+                       parallel      = TRUE,     # 199 cross-validations
+                       ncores        = NULL,
+                       verbose       = TRUE)     # prints the expected runtime
+summary(object = mod7)
+validity(object = mod7, level = 0.05, power = 0.8)
+
+## The Bayesian approach estimates the marginal CDFs jointly with everything
+## else instead of plugging them in, so nothing here is a first-stage estimate
+## whose uncertainty would have to be bootstrapped back in.  The cost is run
+## time: the sampler is linear in n and in the number of iterations, so at
+## n = 9,649 the 102,000 iterations of the paper take a while.  Section 6 goes
+## through the arguments.
+mod8 <- CopRegBAYES(formula    = f1,
+                    data       = dat1_Tropicana,
+                    iterations = 102000,
+                    burnin     = 2000,
+                    thin       = 100,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)           # progress bar
+summary(object = mod8, level = 0.95)
+validity(object = mod8, chains = FALSE, power = 0.8, verbose = interactive())
+
+## the uncorrected benchmark travels with each object, from the same bootstrap
+## resamples, so the standard errors are directly comparable
+mod1$ols.coefficients["price4"]
+c(PG    = coef(object = mod1)["price4"],
+  s2COPE = coef(object = mod2)["price4"],
+  IMA   = coef(object = mod3)["price4"],
+  BMW   = coef(object = mod4)["price4"],
+  JAMS  = coef(object = mod5)["price4"],
+  BAYES = coef(object = mod8)["price4"])
 
 
-# Next, we model all cross-prices as exogenous, specified using |
-mod2sCOPE3 <- CopReg2sCOPE(formula = logmove ~ price4 | price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 + price11,
-                           data = dat1_Tropicana, cdf = "ecdf")
-mod2sCOPE3[[1]] # Regression output
-hist(mod2sCOPE3[[2]]) # Residual distribution
+## --- all prices endogenous, no exogenous part --------------------------------
+
+f2 <- logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 +
+  price8 + price9 + price10
+
+mod9 <- CopRegPG(formula   = f2,
+                 data      = dat1_Tropicana,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 199,
+                 subset    = NULL,
+                 contrasts = NULL,
+                 parallel  = FALSE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod9)
+
+## 2sCOPE has no first stage without exogenous regressors and is redirected to
+## CopRegPG() with a warning.  2sCOPE-np is redirected the same way, since
+## without W the conditional CDF is the marginal one.
+mod10 <- CopReg2sCOPE(formula   = f2,
+                      data      = dat1_Tropicana,
+                      cdf       = "rank.n",
+                      ties      = "max",
+                      nboots    = 199,
+                      subset    = NULL,
+                      contrasts = NULL,
+                      parallel  = FALSE,
+                      ncores    = NULL,
+                      verbose   = interactive())
+
+## BAYES is not redirected: with no exogenous regressors there is simply
+## nothing to restrict in the copula correlation matrix, and the joint
+## estimation of the margins and the correlations proceeds unchanged.
+mod11 <- CopRegBAYES(formula    = logmove ~ price4 + price1 + price2,
+                     data       = dat1_Tropicana,
+                     iterations = 20000,          # short, for a look
+                     burnin     = 2000,
+                     thin       = 20,             # still 900 draws
+                     horseshoe  = TRUE,
+                     prior.args = list(),
+                     start      = NULL,
+                     subset     = NULL,
+                     contrasts  = NULL,
+                     verbose    = interactive())
+summary(object = mod11, level = 0.95)
 
 
-# We consider feature advertising (if the product Tropicana 64 oz is featured)
-# in the store's weekly flyer, and in-store display. All cross-price variables are
-# again endogenous - exogenous variables come after |
-mod2sCOPE4 <- CopReg2sCOPE(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal),
-                           data = dat1_Tropicana, cdf = "ecdf")
-mod2sCOPE4[[1]]
-hist(mod2sCOPE4[[2]])
+## --- adding store fixed effects (83 dummies) ---------------------------------
+
+f3 <- logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 +
+  price8 + price9 + price10 |
+  feat + as.factor(deal) + as.factor(store)
+
+mod12 <- CopRegPG(formula   = f3,
+                  data      = dat1_Tropicana,
+                  cdf       = "kde.silverman",
+                  ties      = "max",
+                  nboots    = 199,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = TRUE,               # 83 dummies, 10 copula terms
+                  ncores    = NULL,
+                  verbose   = interactive())
+summary(object = mod12)
+
+mod13 <- CopReg2sCOPE(formula   = f3,
+                      data      = dat1_Tropicana,
+                      cdf       = "rank.n",
+                      ties      = "max",
+                      nboots    = 199,
+                      subset    = NULL,
+                      contrasts = NULL,
+                      parallel  = TRUE,
+                      ncores    = NULL,
+                      verbose   = interactive())
+summary(object = mod13)
+
+mod14 <- CopRegIMA(formula   = f3,
+                   data      = dat1_Tropicana,
+                   cdf       = "rank.n",
+                   ties      = "max",
+                   nboots    = 199,
+                   subset    = NULL,
+                   contrasts = NULL,
+                   parallel  = TRUE,
+                   ncores    = NULL,
+                   verbose   = interactive())
+summary(object = mod14)
+
+mod15 <- CopRegJAMS(formula     = f3,
+                    data        = dat1_Tropicana,
+                    conditional = TRUE,
+                    cdf         = "ecdf.adj",
+                    ties        = "max",
+                    nboots      = 199,
+                    subset      = NULL,
+                    contrasts   = NULL,
+                    parallel    = TRUE,
+                    ncores      = NULL,
+                    verbose     = interactive())
+summary(object = mod15)
+
+## 83 store dummies mean 83 further rows and columns in the copula correlation
+## matrix and 83 more mass vectors, each sitting on two unique values.  That is
+## the shape of the paper's own application, which carries 121 weekly dummies,
+## but it is the expensive direction to grow in.
 
 
-# Finally, we also consider store fixed effects.
-mod2sCOPE5 <- CopReg2sCOPE(formula = logmove ~ price4 + price1 + price2 + price3 + price5 + price6 + price7 + price8 + price9 + price10 | feat + as.factor(deal) + as.factor(store),
-                           data = dat1_Tropicana, cdf = "ecdf")
-mod2sCOPE5[[1]]
-hist(mod2sCOPE5[[2]])
-
-
-
-# 2. Example
-# Cross-section data originating from the March 1988 Current Population Survey 
-# by the US Census Bureau. Individual-specific observations on wages, years of 
-# education, years of experience, etc.
+## =============================================================================
+##  2. Returns to education (CPS 1988)
+## =============================================================================
 
 library(AER)
-
-data1 <- data("CPS1988")
+data("CPS1988")
 data1 <- CPS1988
-data1$lwage <- log(data1$wage) # generate log wages
-data1$experience_sq <- data1$experience^2 # consider squared work experience
-?CPS1988 # details on dataset are given here
+data1$lwage <- log(data1$wage)
+data1$experience_sq <- data1$experience^2
+
+f4 <- lwage ~ education + experience |
+  experience_sq + parttime + smsa + ethnicity
+
+mod1 <- CopRegPG(formula   = f4,
+                 data      = data1,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 199,
+                 subset    = NULL,
+                 contrasts = NULL,
+                 parallel  = TRUE,                # n = 28,155
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod1)
+validity(object = mod1, level = 0.05, power = 0.8)
+
+mod2 <- CopReg2sCOPE(formula   = f4,
+                     data      = data1,
+                     cdf       = "rank.n",
+                     ties      = "max",
+                     nboots    = 199,
+                     subset    = NULL,
+                     contrasts = NULL,
+                     parallel  = TRUE,
+                     ncores    = NULL,
+                     verbose   = interactive())
+summary(object = mod2)
+validity(object = mod2, level = 0.05, power = 0.8)
+
+## Both warn about education: it is recorded in whole years, 19 distinct values
+## with 37.5% of the sample at a single value.  The copula transformation
+## inverts an estimated CDF, and that point mass is a plateau in it.
+
+mod3 <- CopRegIMA(formula   = f4,
+                  data      = data1,
+                  cdf       = "rank.n",
+                  ties      = "max",
+                  nboots    = 199,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = TRUE,
+                  ncores    = NULL,
+                  verbose   = interactive())
+summary(object = mod3)
+
+## This is the case 2sCOPE-np was built for.  2sCOPE-np inverts the conditional
+## CDF instead, which the kernel estimator of Equation 43 smooths in P as well,
+## so the transformation stays well defined for counts and even binary
+## regressors.  The paper's own return-to-education application is this model.
+mod4 <- CopReg2sCOPEnp(formula       = f4,
+                       data          = data1,
+                       condition     = NULL,
+                       groups        = NULL,
+                       heterogeneous = NULL,
+                       demean        = NULL,
+                       bwmethod      = "cv.ls",
+                       bw.refit      = TRUE,
+                       nboots        = 199,
+                       subset        = NULL,
+                       contrasts     = NULL,
+                       parallel      = TRUE,
+                       ncores        = NULL,
+                       verbose       = TRUE)
+summary(object = mod4)
+validity(object = mod4, level = 0.05, power = 0.8)
+
+## BAYES meets the same tie problem from the other end.  Its margins are
+## probability masses on the unique values, so 19 distinct years of education
+## is 19 masses rather than a plateau in a plug-in CDF, and the mass at the
+## modal value is a parameter with a posterior like any other.  plot() shows
+## it: the estimated CDF has a visible step there, and a credible band that
+## widens where the data are thin.
+mod5 <- CopRegBAYES(formula    = f4,
+                    data       = data1,
+                    iterations = 102000,
+                    burnin     = 2000,
+                    thin       = 100,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+summary(object = mod5, level = 0.95)
+plot(x = mod5, which = "education", type = "cdf", level = 0.95, ask = FALSE)
+validity(object = mod5, chains = FALSE, power = 0.8, verbose = interactive())
+
+## as.factor(experience_sq) produces 63 dummies, four of them with fewer than
+## five observations, and it nearly spans experience itself.  The estimate for
+## experience becomes unstable; the omega column in summary() shows why.
+mod6 <- CopRegPG(formula   = lwage ~ education + experience |
+                             as.factor(experience_sq) + as.factor(parttime) +
+                             smsa + ethnicity,
+                 data      = data1,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 199,
+                 subset    = NULL,
+                 contrasts = NULL,
+                 parallel  = TRUE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod6)
 
 
-mod2sCOPE1 <- CopReg2sCOPE(formula = lwage ~ education + experience | as.factor(experience_sq) + as.factor(parttime) + smsa + ethnicity,
-                           data = data1, cdf = "ecdf")
-mod2sCOPE1[[1]]
-
-mod2sCOPE2 <- CopReg2sCOPE(formula = lwage ~ education + experience | experience_sq + parttime + smsa + ethnicity,
-                           data = data1, cdf = "ecdf")
-mod2sCOPE2[[1]]
-
-
-
-# 3. Example
-# This is a simulated data set containing sales of child car seats at 400 
-# different stores.
+## =============================================================================
+##  3. Carseats
+## =============================================================================
 
 library(ISLR)
-
 data("Carseats")
-dat1 <- Carseats
-?Carseats # details are given here
+dat3 <- Carseats
 
-dat1$lsales <- log(dat1$Sales)
-dat1$lprice <- log(dat1$Price)
-dat1$lcompprice <- log(dat1$CompPrice)
-dat1 <- subset(dat1, is.finite(log(Sales)))
+dat3$lsales     <- log(dat3$Sales)
+dat3$lprice     <- log(dat3$Price)
+dat3$lcompprice <- log(dat3$CompPrice)
+dat3 <- subset(dat3, is.finite(log(Sales)))
 
-mod2sCOPE1 <- CopReg2sCOPE(formula = lsales ~ lprice + lcompprice | ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US,
-                           data = dat1, cdf = "ecdf")
-mod2sCOPE1[[1]]
+f5 <- lsales ~ lprice + lcompprice |
+  ShelveLoc + Income + Advertising + Population + Age + Education + Urban + US
+
+mod1 <- CopRegPG(formula   = f5,
+                 data      = dat3,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 299,                 # n = 400, so more replicates
+                 subset    = NULL,
+                 contrasts = NULL,
+                 parallel  = FALSE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod1)
+
+## n = 400 falls in the range where Becker, Proksch & Ringle (2022) require
+## strong nonnormality; validity() reports their thresholds next to the KS
+## criterion of Yang, Qian & Xie (2025).  power = is the power the thresholds
+## are read at, level = the significance level of the normality tests.
+validity(object = mod1, level = 0.05, power = 0.8)
+validity(object = mod1, level = 0.05, power = 0.9)
+validity(object = mod1, level = 0.01, power = 0.8)
+
+mod2 <- CopReg2sCOPE(formula   = f5,
+                     data      = dat3,
+                     cdf       = "rank.n",
+                     ties      = "max",
+                     nboots    = 299,
+                     subset    = NULL,
+                     contrasts = NULL,
+                     parallel  = FALSE,
+                     ncores    = NULL,
+                     verbose   = interactive())
+summary(object = mod2)
+validity(object = mod2, level = 0.05, power = 0.8)
+
+mod3 <- CopRegIMA(formula   = f5,
+                  data      = dat3,
+                  cdf       = "rank.n",
+                  ties      = "max",
+                  nboots    = 299,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = FALSE,
+                  ncores    = NULL,
+                  verbose   = interactive())
+summary(object = mod3)
+validity(object = mod3, level = 0.05, power = 0.8)
+
+## conditional = TRUE takes all three factors, so 3 x 2 x 2 = 12 cells with two
+## copula terms each, which is a lot for n = 400
+mod4 <- CopRegJAMS(formula     = f5,
+                   data        = dat3,
+                   conditional = TRUE,
+                   cdf         = "ecdf.adj",
+                   ties        = "max",
+                   nboots      = 299,
+                   subset      = NULL,
+                   contrasts   = NULL,
+                   parallel    = FALSE,
+                   ncores      = NULL,
+                   verbose     = interactive())
+summary(object = mod4)
+
+## conditioning on ShelveLoc alone gives three cells; Urban and US stay in the
+## model as ordinary controls
+mod5 <- CopRegJAMS(formula     = f5,
+                   data        = dat3,
+                   conditional = "ShelveLoc",     # only this factor
+                   cdf         = "ecdf.adj",
+                   ties        = "max",
+                   nboots      = 299,
+                   subset      = NULL,
+                   contrasts   = NULL,
+                   parallel    = FALSE,
+                   ncores      = NULL,
+                   verbose     = interactive())
+summary(object = mod5)
+validity(object = mod5, level = 0.05, power = 0.8)
+
+## The Bayesian version of the same model.  At n = 400 the default 102,000
+## iterations run in a couple of minutes.
+mod6 <- CopRegBAYES(formula    = f5,
+                    data       = dat3,
+                    iterations = 102000,
+                    burnin     = 2000,
+                    thin       = 100,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+summary(object = mod6, level = 0.95)
+validity(object = mod6, chains = FALSE, power = 0.8, verbose = interactive())
+
+## The whole toolbox on one coefficient.  The frequentist estimators report a
+## point estimate with a bootstrap standard error, the Bayesian one a posterior
+## mean; they are not the same object, and a credible interval is not a
+## confidence interval, but they answer the same question.
+c(PG     = coef(object = mod1)["lprice"],
+  s2COPE = coef(object = mod2)["lprice"],
+  IMA    = coef(object = mod3)["lprice"],
+  JAMS   = coef(object = mod5)["lprice"],
+  BAYES  = coef(object = mod6)["lprice"])
+
+## subset = takes a logical vector, exactly as in lm().  Pick one that does
+## not empty a factor level of the model: subsetting to a single level of US
+## while US is still a regressor leaves an all-zero dummy, and the estimator
+## says so rather than silently dropping it.
+mod7 <- CopRegPG(formula   = f5,
+                 data      = dat3,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 299,
+                 subset    = dat3$Income > 40,   # a subsample
+                 contrasts = NULL,
+                 parallel  = FALSE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod7)
+
+## contrasts = is passed to model.matrix(), so the coding of the factors is
+## under your control
+mod8 <- CopRegPG(formula   = f5,
+                 data      = dat3,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 299,
+                 subset    = NULL,
+                 contrasts = list(ShelveLoc = "contr.sum"),   # sum coding
+                 parallel  = FALSE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod8)
+
+## factors work either way, as a factor column or via as.factor() in the
+## formula; the fit is identical, only the column order changes
+dat3$ShelveLoc_num <- as.numeric(dat3$ShelveLoc)
+
+mod9 <- CopRegPG(formula   = lsales ~ lprice + lcompprice |
+                             Income + Advertising + Population + Age +
+                             Education + as.factor(ShelveLoc_num) +
+                             as.factor(Urban) + as.factor(US),
+                 data      = dat3,
+                 cdf       = "kde.silverman",
+                 ties      = "max",
+                 nboots    = 299,
+                 subset    = NULL,
+                 contrasts = NULL,
+                 parallel  = FALSE,
+                 ncores    = NULL,
+                 verbose   = interactive())
+summary(object = mod9)
 
 
-dat1$ShelveLoc_num <- as.numeric(dat1$ShelveLoc)
+## =============================================================================
+##  4. Varying the arguments on a single model
+## =============================================================================
 
-mod2sCOPE2 <- CopReg2sCOPE(formula = lsales ~ lprice + lcompprice | Income + Advertising + Population + Age + Education + as.factor(ShelveLoc_num) + as.factor(Urban) + US,
-                           data = dat1, cdf = "ecdf")
-mod2sCOPE2[[1]]
+## Interactions and polynomials follow the formula like anything else: written
+## before the "|" they are endogenous and get their own copula term, written
+## after it they are exogenous and get none.  The rule is the same in every
+## estimator, including BAYES and PANEL, where such a term gets its own row and
+## column in the copula correlation matrix rather than an added regressor.
+
+CopRegPG(formula   = lsales ~ lprice + lprice:Advertising |
+                     Advertising + Income,
+         data      = dat3,
+         cdf       = "kde.silverman",
+         ties      = "max",
+         nboots    = 99,
+         subset    = NULL,
+         contrasts = NULL,
+         parallel  = FALSE,
+         ncores    = NULL,
+         verbose   = interactive())      # lprice:Advertising gets its own term
+
+CopRegPG(formula   = lsales ~ lprice |
+                     lprice:Advertising + Advertising + Income,
+         data      = dat3,
+         cdf       = "kde.silverman",
+         ties      = "max",
+         nboots    = 99,
+         subset    = NULL,
+         contrasts = NULL,
+         parallel  = FALSE,
+         ncores    = NULL,
+         verbose   = interactive())      # exogenous, no term
+
+## The first form warns: two endogenous terms built from lprice are strongly
+## collinear, and Qian, Koschmann & Xie (2025) show that the added variance
+## usually outweighs what the extra term buys.  It is a warning, not a veto.
+
+
+## --- the seven CDF estimators ------------------------------------------------
+
+f6 <- lsales ~ lprice | Income + Advertising + Age
+
+cdfs <- c("kde.silverman", "kde.cv", "kde.plugin",
+          "ecdf.fixed", "ecdf.adj", "rank.n", "rank.n1")
+sens <- sapply(cdfs, function(k)
+  coef(object = CopReg2sCOPE(formula   = f6,
+                             data      = dat3,
+                             cdf       = k,
+                             ties      = "max",
+                             nboots    = 99,
+                             subset    = NULL,
+                             contrasts = NULL,
+                             parallel  = FALSE,
+                             ncores    = NULL,
+                             verbose   = FALSE))["lprice"])
+round(sens, 4)
+
+## midranks instead of the counting function
+mod10 <- CopReg2sCOPE(formula   = lsales ~ lprice |
+                                  Income + Advertising + Education,
+                      data      = dat3,
+                      cdf       = "rank.n",
+                      ties      = "average",     # midranks
+                      nboots    = 99,
+                      subset    = NULL,
+                      contrasts = NULL,
+                      parallel  = FALSE,
+                      ncores    = NULL,
+                      verbose   = interactive())
+summary(object = mod10)
+
+## That whole comparison has no counterpart in 2sCOPE-np or BAYES: the first
+## has no marginal CDF at all, the second treats it as a parameter.  Both say
+## so rather than ignoring the argument.
+CopReg2sCOPEnp(formula       = lsales ~ lprice | Income + Age,
+               data          = dat3,
+               condition     = NULL,
+               groups        = NULL,
+               heterogeneous = NULL,
+               demean        = NULL,
+               bwmethod      = "cv.ls",
+               bw.refit      = TRUE,
+               nboots        = 99,
+               subset        = NULL,
+               contrasts     = NULL,
+               parallel      = FALSE,
+               ncores        = NULL,
+               verbose       = interactive(),
+               cdf           = "rank.n")         # error, by design
+
+CopRegBAYES(formula    = lsales ~ lprice | Income + Age,
+            data       = dat3,
+            iterations = 102000,
+            burnin     = 2000,
+            thin       = 100,
+            horseshoe  = TRUE,
+            prior.args = list(),
+            start      = NULL,
+            subset     = NULL,
+            contrasts  = NULL,
+            verbose    = interactive(),
+            cdf        = "rank.n")               # error, by design
+
+CopRegBAYES(formula    = lsales ~ lprice | Income + Age,
+            data       = dat3,
+            iterations = 102000,
+            burnin     = 2000,
+            thin       = 100,
+            horseshoe  = TRUE,
+            prior.args = list(),
+            start      = NULL,
+            subset     = NULL,
+            contrasts  = NULL,
+            verbose    = interactive(),
+            nboots     = 199)                    # error, by design
+
+
+## --- update() and the generic entry point ------------------------------------
+
+## update() understands the two-part syntax and refits with everything else
+## unchanged.  Switching estimator drops the arguments the new one does not
+## have, and says which.
+mod11 <- update(object = mod1, formula. = . ~ . | . - Population,
+                evaluate = TRUE)
+mod12 <- update(object = mod1, cdf = "ecdf.adj", evaluate = TRUE)
+mod13 <- update(object = mod1, method = "ima", evaluate = TRUE)
+mod14 <- update(object = mod1, method = "jams", evaluate = TRUE)
+mod15 <- update(object = mod1, method = "np", evaluate = TRUE)
+update(object = mod1, method = "bmw", evaluate = FALSE)   # the call, unevaluated
+
+## copreg() only rewrites the call and hands it to the estimator's own
+## function, so both routes behave identically down to the warnings;
+## cdf = NULL, the default, resolves to the estimator's own CDF.  PANEL and
+## BAYES are deliberately not in the registry: the first needs an index and a
+## different likelihood, the second replaces bootstrap inference by a
+## posterior, so neither is a drop-in substitute for the others.
+sapply(names(.copreg_registry), function(m) .copreg_registry[[m]]$cdf)
+
+mod16 <- copreg(formula   = f5,
+                data      = dat3,
+                method    = "2scope",
+                cdf       = NULL,
+                ties      = "max",
+                nboots    = 299,
+                subset    = NULL,
+                contrasts = NULL,
+                parallel  = FALSE,
+                ncores    = NULL,
+                verbose   = interactive())
+summary(object = mod16)
+
+## BMW is the one place where the CDF choice is not free: Proposition 3.1 of
+## Breitung, Mayer & Wied (2024) is derived for Rank/(n+1), so anything else
+## warns, whichever route you take.
+CopRegBMW(formula   = f6,
+          data      = dat3,
+          cdf       = "ecdf.adj",                # warns
+          ties      = "max",
+          nboots    = 99,
+          subset    = NULL,
+          contrasts = NULL,
+          parallel  = FALSE,
+          ncores    = NULL,
+          verbose   = interactive())
+
+copreg(formula   = f6,
+       data      = dat3,
+       method    = "bmw",
+       cdf       = "ecdf.adj",                   # warns identically
+       ties      = "max",
+       nboots    = 99,
+       subset    = NULL,
+       contrasts = NULL,
+       parallel  = FALSE,
+       ncores    = NULL,
+       verbose   = interactive())
+
+
+## --- parallel ----------------------------------------------------------------
+
+## TRUE picks the platform default, "multicore" forks (not on Windows) and
+## "snow" starts a PSOCK cluster.  ncores = NULL uses one less than detected.
+mod17 <- CopRegPG(formula   = f5,
+                  data      = dat3,
+                  cdf       = "kde.silverman",
+                  ties      = "max",
+                  nboots    = 299,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = "snow",
+                  ncores    = 4,
+                  verbose   = interactive())
+
+mod18 <- CopRegPG(formula   = f5,
+                  data      = dat3,
+                  cdf       = "kde.silverman",
+                  ties      = "max",
+                  nboots    = 299,
+                  subset    = NULL,
+                  contrasts = NULL,
+                  parallel  = "multicore",
+                  ncores    = 4,
+                  verbose   = interactive())
+
+
+## =============================================================================
+##  5. 2sCOPE-np: what to condition on, and how
+## =============================================================================
+##
+##  Everything specific to this estimator concerns the first step, the
+##  conditional CDF of P given W.  The structural model is untouched by all
+##  four arguments below: every exogenous regressor stays a regressor.
+
+## The default conditions on all exogenous variables of the model, minus the
+## polynomial and interaction terms that Section 3.1.4 says to leave out -- the
+## kernel estimator accommodates nonlinearity by itself.  A message names what
+## was dropped.
+np1 <- CopReg2sCOPEnp(formula       = lsales ~ lprice |
+                                      Income + I(Income^2) + Advertising + Age,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = NULL,
+                      heterogeneous = NULL,
+                      demean        = NULL,
+                      bwmethod      = "cv.ls",
+                      bw.refit      = TRUE,
+                      nboots        = 99,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+summary(object = np1)
+
+## condition = names the conditioning variables explicitly.  Section 3.1.3
+## recommends dropping covariates known to be irrelevant for P: every further
+## variable thins out the local neighbourhood the estimator averages over.
+np2 <- CopReg2sCOPEnp(formula       = lsales ~ lprice |
+                                      Income + Advertising + Population +
+                                      Age + Education,
+                      data          = dat3,
+                      condition     = c("Income", "Advertising"),
+                      groups        = NULL,
+                      heterogeneous = NULL,
+                      demean        = NULL,
+                      bwmethod      = "cv.ls",
+                      bw.refit      = TRUE,
+                      nboots        = 99,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+
+## groups = estimates the conditional CDF separately within each joint category
+## of the named variables instead of smoothing them with their own kernel
+## (Section 3.1.5).  One copula coefficient as before.
+np3 <- CopReg2sCOPEnp(formula       = lsales ~ lprice |
+                                      ShelveLoc + Income + Advertising + Age,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = "ShelveLoc",
+                      heterogeneous = NULL,
+                      demean        = NULL,
+                      bwmethod      = "cv.ls",
+                      bw.refit      = TRUE,
+                      nboots        = 99,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+
+## demean = treats the categories as fixed effects and sweeps them out of P and
+## the continuous conditioning variables before the first step (Section 3.1.5,
+## for clustered data whose categorical variables are too many to smooth and
+## too fine to group by).
+np4 <- CopReg2sCOPEnp(formula       = lsales ~ lprice |
+                                      ShelveLoc + Income + Advertising + Age,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = NULL,
+                      heterogeneous = NULL,
+                      demean        = "ShelveLoc",
+                      bwmethod      = "cv.ls",
+                      bw.refit      = TRUE,
+                      nboots        = 99,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+
+## heterogeneous = is Proposition 3: the endogeneity itself may differ across
+## groups.  The conditional CDF is estimated within each subsample and the
+## copula terms are parameterised against the first group, so lprice_cop is the
+## reference group and lprice_cop.<level> are deviations from it -- the
+## parameterisation of the paper's return-to-education example.  summary() adds
+## the joint test of all deviations being zero.
+np5 <- CopReg2sCOPEnp(formula       = lsales ~ lprice |
+                                      ShelveLoc + Income + Advertising + Age,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = NULL,
+                      heterogeneous = "ShelveLoc",
+                      demean        = NULL,
+                      bwmethod      = "cv.ls",
+                      bw.refit      = TRUE,
+                      nboots        = 199,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+summary(object = np5)
+np5$bandwidths                # also printed by summary()
+summary(object = np5)$wald.z  # do the deviations jointly vanish?
+
+## Anything in ... goes to np::npcdistbw().  The defaults are np's own and
+## hence the paper's: second-order Gaussian kernels for continuous variables,
+## Aitchison & Aitken kernels for unordered factors.
+np6 <- CopReg2sCOPEnp(formula       = f6,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = NULL,
+                      heterogeneous = NULL,
+                      demean        = NULL,
+                      bwmethod      = "cv.ls",
+                      bw.refit      = TRUE,
+                      nboots        = 99,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive(),
+                      ckertype      = "epanechnikov",   # to npcdistbw()
+                      nmulti        = 2)                # to npcdistbw()
+
+## Two escape hatches for the runtime, both departures from the paper, so use
+## them knowingly.  bwmethod = "normal-reference" replaces the cross-validation
+## by a closed-form rule; bw.refit = FALSE keeps the full-sample bandwidths
+## instead of reselecting them in every bootstrap replicate, which is what
+## Section 2.5 prescribes and what makes the standard errors account for the
+## variability of the first stage.
+np7 <- CopReg2sCOPEnp(formula       = f6,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = NULL,
+                      heterogeneous = NULL,
+                      demean        = NULL,
+                      bwmethod      = "normal-reference",
+                      bw.refit      = TRUE,
+                      nboots        = 199,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+
+np8 <- CopReg2sCOPEnp(formula       = f6,
+                      data          = dat3,
+                      condition     = NULL,
+                      groups        = NULL,
+                      heterogeneous = NULL,
+                      demean        = NULL,
+                      bwmethod      = "cv.ls",
+                      bw.refit      = FALSE,
+                      nboots        = 199,
+                      subset        = NULL,
+                      contrasts     = NULL,
+                      parallel      = FALSE,
+                      ncores        = NULL,
+                      verbose       = interactive())
+
+c(paper             = coef(object = np1)["lprice"],
+  normal.reference  = coef(object = np7)["lprice"],
+  frozen.bandwidths = coef(object = np8)["lprice"])
+
+
+## =============================================================================
+##  6. The Bayesian approach
+## =============================================================================
+##
+##  Everything the other estimators do in stages happens here in one.  The
+##  marginal CDFs are not plugged in but are unknown parameters -- probability
+##  masses on the uniquely observed values of each regressor -- and they are
+##  drawn along with the regression coefficients, the error variance and the
+##  full copula correlation matrix.  Nothing is estimated a priori, so there is
+##  no plug-in uncertainty to bootstrap back in; the posterior carries it.
+
+f7 <- lsales ~ lprice + lcompprice |
+  ShelveLoc + Income + Advertising + Age
+
+bay1 <- CopRegBAYES(formula    = f7,
+                    data       = dat3,
+                    iterations = 102000,
+                    burnin     = 2000,
+                    thin       = 100,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+
+## summary() reports the posterior mean, the posterior median, the posterior
+## standard deviation and a credible interval, for the coefficients, for the
+## structural error variance and for the endogeneity correlations.  The
+## correlations between the exogenous regressors and the error do not appear:
+## they are held at zero, which is what makes those regressors exogenous, and
+## the block-recursive sampler holds them there exactly rather than
+## approximately.
+summary(object = bay1, level = 0.95)
+summary(object = bay1, level = 0.90)
+summary(object = bay1, level = 0.99)
+
+## The correlation of interest is rho(lprice*, xi*), and summary() shows only
+## that one and its counterpart for lcompprice.  The correlations among the
+## regressors are estimated jointly too, but they are nuisance parameters and
+## there are many of them, so they stay on the object rather than in the
+## output.  Naming follows the rest of the toolbox: P for the endogenous
+## regressors, W for the exogenous ones, xi for the structural error, and a
+## star for the normal score.  The paper writes z, x and e for the same three.
+head(bay1$Sigma.draws[, "rho(lprice*, xi*)"])
+mean(bay1$Sigma.draws[, "rho(lprice*, xi*)"] > 0)
+bay1$rho.names                # the endogeneity correlations, by name
+colnames(bay1$Sigma.draws)    # all of them, free and restricted alike
+
+
+## --- how long to run it ------------------------------------------------------
+##
+## The defaults are the setting of the paper's simulations: 102,000 iterations,
+## the first 2,000 discarded and every 100th of the rest retained, leaving
+## 1,000 draws.  The empirical application runs ten times as long with
+## thin = 10,000 for the same 1,000 draws, on the argument that a chain cannot
+## be too long.  Thinning happens while sampling, so only the retained draws
+## are ever held in memory: keeping every iterate and thinning afterwards would
+## need about 21 GB for that application.
+
+bay2 <- CopRegBAYES(formula    = f7,
+                    data       = dat3,
+                    iterations = 20000,           # short
+                    burnin     = 2000,
+                    thin       = 20,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+
+bay3 <- CopRegBAYES(formula    = f7,
+                    data       = dat3,
+                    iterations = 1002000,         # the paper's application
+                    burnin     = 2000,
+                    thin       = 10000,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+
+
+## --- priors ------------------------------------------------------------------
+##
+## horseshoe = TRUE is the prior of Equation (5) in the marginalised form of
+## Equation (6), on every coefficient including the intercept, and is the
+## specification the paper settles on.  FALSE puts an independent normal on
+## each coefficient with its own inverse Gamma variance, drawn by a conjugate
+## Gibbs step.
+
+bay4 <- CopRegBAYES(formula    = f7,
+                    data       = dat3,
+                    iterations = 102000,
+                    burnin     = 2000,
+                    thin       = 100,
+                    horseshoe  = FALSE,           # normal with IG variance
+                    prior.args = list(),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+c(horseshoe = coef(object = bay1)["lprice"],
+  normal    = coef(object = bay4)["lprice"])
+
+## Every hyperparameter is reachable through prior.args and defaults to the
+## paper.  The full list, with the defaults it would use anyway:
+##
+##   a, b            inverse Gamma prior on sigma^2, Equation (7)
+##   a_phi, b_phi    inverse Gamma prior on the coefficient variances
+##                   (horseshoe = FALSE only)
+##   nu1, Psi1       inverse Wishart prior on Sigma_xx
+##   nu2, Psi2       inverse Wishart prior on Omega
+##   a_e, b_e        inverse Gamma prior on sigma_e^2
+##   M0, V0          matrix normal prior on C = [B_x | beta_e]
+bay1$prior.args
+
+## Read the two dimensions off a fitted model rather than counting by hand:
+## ShelveLoc contributes two dummy columns, not one.
+K <- length(bay1$endo.names)   # endogenous columns
+L <- length(bay1$exog.names)   # exogenous columns, intercept excluded
+
+bay5 <- CopRegBAYES(formula    = f7,
+                    data       = dat3,
+                    iterations = 102000,
+                    burnin     = 2000,
+                    thin       = 100,
+                    horseshoe  = TRUE,
+                    prior.args = list(a     = 0.001,
+                                      b     = 0.001,
+                                      a_phi = 0.001,
+                                      b_phi = 0.001,
+                                      nu1   = L + 2,
+                                      Psi1  = diag(L),
+                                      nu2   = K + 2,
+                                      Psi2  = diag(K),
+                                      a_e   = 0.001,
+                                      b_e   = 0.001,
+                                      M0    = matrix(0, K, L + 1L),
+                                      V0    = diag(L + 1L)),
+                    start      = NULL,
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+
+## Starting values follow Web Appendix D: OLS for the coefficients and the
+## error variance, the identity for the correlation matrix, one Dir(1) draw per
+## regressor for the masses.  Any of them can be replaced; the full list is
+## coefficients, sigma2, Sigma, lambda and phi2.
+bay6 <- CopRegBAYES(formula    = lsales ~ lprice | Income + Advertising + Age,
+                    data       = dat3,
+                    iterations = 20000,
+                    burnin     = 2000,
+                    thin       = 20,
+                    horseshoe  = TRUE,
+                    prior.args = list(),
+                    start      = list(coefficients = rep(0, 5),
+                                      sigma2       = 1,
+                                      Sigma        = diag(5),
+                                      lambda       = NULL,
+                                      phi2         = rep(1000, 5)),
+                    subset     = NULL,
+                    contrasts  = NULL,
+                    verbose    = TRUE)
+
+
+## --- looking at the chain ----------------------------------------------------
+##
+## A model of any size has far more parameters than fit on a screen, so plot()
+## takes which = to select them, by name or by position.  NULL, the default,
+## is the endogenous regressors, which are what the correction is about.
+## ask = NULL asks between plots only when there is more than one and the
+## device is interactive.
+
+plot(x = bay1, which = NULL, type = "trace",   level = 0.95, ask = NULL)
+plot(x = bay1, which = NULL, type = "acf",     level = 0.95, ask = NULL)
+plot(x = bay1, which = NULL, type = "pacf",    level = 0.95, ask = NULL)
+plot(x = bay1, which = NULL, type = "density", level = 0.95, ask = NULL)
+
+plot(x = bay1, which = c("lprice", "sigma2", "rho(lprice*, xi*)"),
+     type = "trace", level = 0.95, ask = TRUE)
+plot(x = bay1, which = 1:3, type = "density", level = 0.95, ask = FALSE)
+
+colnames(bay1$draws)          # everything that can be named in which =
+
+## type = "cdf" is different in kind.  It shows the marginal distribution of a
+## regressor as the model estimates it -- the cumulative sums of the
+## probability masses -- with a pointwise credible band across the draws.  That
+## object does not exist in the frequentist estimators, where the CDF is a
+## fixed plug-in with no uncertainty attached to it at all.
+plot(x = bay1, which = NULL, type = "cdf", level = 0.95, ask = NULL)
+plot(x = bay1, which = c("lprice", "Income"), type = "cdf",
+     level = 0.90, ask = FALSE)
+names(bay1$lambda.draws)      # everything that has an estimated margin
+
+## The raw draws are there for anything the methods do not cover.
+dim(bay1$draws)
+head(bay1$coefficient.draws)
+head(bay1$sigma2.draws)
+bay1$acceptance
+
+
+## --- checks ------------------------------------------------------------------
+##
+## validity() does two things at once.  The identification side is the same
+## question as everywhere: without a nonnormal endogenous regressor E(e|z) is
+## linear and the copula cannot separate it from the regression.  The
+## convergence side is specific to MCMC -- Geweke, effective sample size and
+## the lag-one autocorrelation, all computed from the chain that already
+## exists.
+
+validity(object = bay1, chains = FALSE, power = 0.8, verbose = interactive())
+
+## Gelman-Rubin is the exception: it needs several chains from dispersed
+## starts, which means running the sampler again, once per chain.  The
+## dispersed starts follow Web Appendix E -- normal around the OLS estimates
+## for the coefficients, LKJ for the correlation matrix, Dir(1) for the masses.
+## chains = TRUE uses four; a number sets it.  Gelman et al. read convergence
+## as GR <= 1.1.
+v <- validity(object = bay1, chains = 4, power = 0.8, verbose = TRUE)
+v$gelman.rubin
+v$convergence
+v$endogeneity
+v$nonnormality
+v$thresholds
+v$acceptance
+
+
+## =============================================================================
+##  7. Panel data
+## =============================================================================
+##
+##  CopRegPANEL() is a separate model class, the way plm is separate from lm.
+##  It is estimated by maximum likelihood rather than augmented least squares,
+##  it needs an index, and it is deliberately not reachable through copreg().
+##
+##  The orange juice data are a store by week panel, so the same data used
+##  above can be looked at either way.
+
+dat5 <- orangeJuice[[1]]
+dat5 <- dat5[dat5$brand == 4, ]
+pcols <- grep("^price", names(dat5), value = TRUE)
+dat5[pcols] <- lapply(dat5[pcols], log)
+
+## 83 stores, 87 to 121 weeks each
+pan1 <- CopRegPANEL(formula   = logmove ~ price4 |
+                                price1 + price2 + price3 + feat +
+                                as.factor(deal),
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 199,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+summary(object = pan1)
+
+## validity() carries the checkpoints that survive the transformation: the
+## nonnormality thresholds of Becker, Proksch & Ringle (2022), whose Study 3
+## covers fixed-effects panels and finds the cross-sectional thresholds apply
+## once total n is the reference; the normality of the transformed error, which
+## Equation 12 assumes outright; and the standard errors against the plain
+## within estimator on the same resamples, for which Haschka (2022) reads a
+## factor of five to ten as a clear sign the model is not identified.
+##
+## The uncorrelatedness assumption is not among them: modelling the correlation
+## between endogenous and exogenous regressors rather than assuming it away is
+## the point of this estimator.
+validity(object = pan1, level = 0.05, power = 0.8)
+
+## the uncorrected benchmark travels with the object, from the same resamples
+pan1$within.coefficients
+pan1$within.std.error
+pan1$se.ratio
+
+## Both scales are available everywhere.  structural = TRUE is the model as
+## written down, y = alpha_i + x'beta + z'delta + e, on the original rows.
+## structural = FALSE is the transformed model that maximum likelihood actually
+## fits, and those residuals are the ones the likelihood treats as normal, so
+## they are what to inspect when checking that assumption.
+hist(residuals(object = pan1, structural = TRUE), breaks = 40,
+     main = "structural")
+hist(residuals(object = pan1, structural = FALSE), breaks = 40,
+     main = "transformed")
+qqnorm(residuals(object = pan1, structural = FALSE))
+qqline(residuals(object = pan1, structural = FALSE))
+
+fitted(object = pan1, structural = TRUE)
+fitted(object = pan1, structural = FALSE)
+fixef(object = pan1)                                     # the effects alpha_i
+predict(object = pan1, newdata = head(dat5, 5), structural = TRUE)
+coef(object = pan1)
+vcov(object = pan1)
+confint(object = pan1, parm = names(coef(object = pan1)), level = 0.95,
+        type = "normal")
+confint(object = pan1, parm = names(coef(object = pan1)), level = 0.95,
+        type = "percentile")
+logLik(object = pan1)
+AIC(object = pan1)
+BIC(object = pan1)
+
+## A lagged dependent variable is written straight into the formula; lag(),
+## lead() and diff() are panel aware and never reach across a store boundary.
+## It belongs in the endogenous part: the transformation does not make it
+## predetermined, since it averages over future values of the lagged series,
+## which contain the current error.
+pan2 <- CopRegPANEL(formula   = logmove ~ lag(logmove) + price4 |
+                                price1 + price2 + feat + as.factor(deal),
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 199,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = TRUE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+summary(object = pan2)
+
+## higher lags and interactions work as they would in lm()
+pan3 <- CopRegPANEL(formula   = logmove ~ price4 + price4:feat |
+                                price1 + lag(price1) + feat + as.factor(deal),
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 199,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+summary(object = pan3)
+
+## Time dummies stay in the model but are dropped from the copula: they are
+## deterministic functions of the period and identical across panels, so after
+## the transformation a full set of them is one dimension short.  The message
+## says which columns were affected.
+pan4 <- CopRegPANEL(formula   = logmove ~ price4 |
+                                price1 + feat + as.factor(week),
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 99,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+
+## An intercept is off by default.  A fixed-effects transformation removes
+## anything time invariant, so the structural intercept is gone with the
+## individual effects; intercept = TRUE adds a free constant to the transformed
+## regression, which is what the original implementation offered.  It is
+## collinear with a full set of time dummies.  summary() says which of the two
+## the model carries.
+pan5 <- CopRegPANEL(formula   = logmove ~ price4 | price1 + feat,
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = TRUE,             # free constant
+                    nboots    = 99,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+summary(object = pan5)
+
+## cdf defaults to "kde.plugin", a Gaussian kernel with the Polansky & Baker
+## plug-in bandwidth -- the estimator the original code used, reimplemented
+## without the ks dependency.  The paper itself integrates the density
+## estimator of Ngom et al. (2018) and allows conventional kernel estimation or
+## the empirical CDF as alternatives, so the whole menu is open here too.
+pan6 <- CopRegPANEL(formula   = logmove ~ price4 | price1 + feat,
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "ecdf.adj",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 99,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+
+## The optimiser tries BFGS and falls back to Nelder-Mead by itself; you can
+## also force the derivative-free route from the start, raise the iteration
+## cap, or hand it your own starting values.
+pan7 <- CopRegPANEL(formula   = logmove ~ price4 | price1 + feat,
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 99,
+                    method    = "Nelder-Mead",
+                    start     = NULL,
+                    maxit     = 20000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+
+## The same formula rule applies here, except that there is no augmented
+## regression: an endogenous term gets its own rho in the copula correlation
+## matrix rather than an added regressor.
+pan8 <- CopRegPANEL(formula   = logmove ~ price4 + price4:feat | price1 + feat,
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 99,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+
+pan9 <- CopRegPANEL(formula   = logmove ~ price4 | price4:feat + price1 + feat,
+                    data      = dat5,
+                    index     = c("store", "week"),
+                    cdf       = "kde.plugin",
+                    ties      = "max",
+                    intercept = FALSE,
+                    nboots    = 99,
+                    method    = "BFGS",
+                    start     = NULL,
+                    maxit     = 5000L,
+                    subset    = NULL,
+                    contrasts = NULL,
+                    parallel  = FALSE,
+                    ncores    = NULL,
+                    verbose   = interactive())
+
+
+## =============================================================================
+##  8. Extractors
+## =============================================================================
+##
+##  Three fresh models, so that this section does not depend on which "mod1"
+##  the script happens to be holding.
+
+ex1 <- CopRegPG(formula   = lsales ~ lprice + lcompprice |
+                            Income + Advertising + Age,
+                data      = dat3,
+                cdf       = "kde.silverman",
+                ties      = "max",
+                nboots    = 199,
+                subset    = NULL,
+                contrasts = NULL,
+                parallel  = FALSE,
+                ncores    = NULL,
+                verbose   = interactive())
+
+ex2 <- CopRegJAMS(formula     = lsales ~ lprice + lcompprice |
+                                ShelveLoc + Income + Advertising + Age,
+                  data        = dat3,
+                  conditional = "ShelveLoc",
+                  cdf         = "ecdf.adj",
+                  ties        = "max",
+                  nboots      = 199,
+                  subset      = NULL,
+                  contrasts   = NULL,
+                  parallel    = FALSE,
+                  ncores      = NULL,
+                  verbose     = interactive())
+
+ex3 <- CopRegBAYES(formula    = lsales ~ lprice + lcompprice |
+                                Income + Advertising + Age,
+                   data       = dat3,
+                   iterations = 20000,
+                   burnin     = 2000,
+                   thin       = 20,
+                   horseshoe  = TRUE,
+                   prior.args = list(),
+                   start      = NULL,
+                   subset     = NULL,
+                   contrasts  = NULL,
+                   verbose    = interactive())
+
+
+## --- the augmented-regression estimators -------------------------------------
+
+coef(object = ex1)
+vcov(object = ex1)                              # bootstrap covariance matrix
+nobs(object = ex1)
+formula(x = ex1)
+confint(object = ex1, parm = names(coef(object = ex1)), level = 0.95,
+        type = "normal")
+confint(object = ex1, parm = names(coef(object = ex1)), level = 0.95,
+        type = "percentile")
+confint(object = ex1, parm = "lprice", level = 0.99, type = "percentile")
+
+residuals(object = ex1, type = "structural")    # xi = y - mu - P a - W b
+residuals(object = ex1, type = "augmented")     # u = xi - C gamma
+fitted(object = ex1, type = "structural")       # mu + P a + W b
+fitted(object = ex1, type = "augmented")
+predict(object = ex1, newdata = head(dat3, 5))  # structural model only
+
+ex1$rho                               # corr(xi*, P*) per endogenous regressor
+ex1$rho.se
+ex1$ols.coefficients                  # uncorrected benchmark, same resamples
+ex1$ols.std.error
+ex1$icon
+ex1$boot                              # raw B x k bootstrap draws
+
+ex1$diagnostics$nonnormality
+ex1$diagnostics$exog.correlation
+ex1$diagnostics$exog.correlation.matrix
+ex1$diagnostics$collinearity
+
+summary(object = ex1)$wald            # joint Wald test of the copula terms
+summary(object = ex2)$wald.z          # do they differ across the categories?
+ex2$copula.groups                     # which copula column belongs to which cell
+
+v <- validity(object = ex1, level = 0.05, power = 0.8)
+v$step1                               # nonnormality, Becker and Yang criteria
+v$step2$violated                      # the uncorrelatedness assumption
+v$step3                               # identifying variation in W
+v$step4                               # error term
+v$icon
+
+
+## --- the Bayesian class ------------------------------------------------------
+##
+##  The same generics, reading a posterior instead of a bootstrap distribution:
+##  coef() is the posterior mean, vcov() the posterior covariance, confint() a
+##  credible interval taken from the draws themselves rather than from a normal
+##  approximation to them.  There is no type = here, because there is only one
+##  kind of interval, and residuals() has no type = either, because there is no
+##  augmented regression.
+
+coef(object = ex3)
+ex3$posterior.median
+ex3$std.error                         # posterior standard deviation
+vcov(object = ex3)
+nobs(object = ex3)
+formula(x = ex3)
+confint(object = ex3, parm = names(coef(object = ex3)), level = 0.95)
+confint(object = ex3, parm = "lprice", level = 0.99)
+fitted(object = ex3)
+residuals(object = ex3)
+predict(object = ex3, newdata = head(dat3, 5))
+
+ex3$draws                             # every parameter, one column each
+ex3$coefficient.draws
+ex3$sigma2.draws
+ex3$Sigma.draws                       # including the structural zeros
+ex3$Sigma.free                        # which of those columns are free
+ex3$lambda.draws                      # the probability masses, per regressor
+ex3$margins                           # the unique values they sit on
+ex3$acceptance
+ex3$ndraws
+ex3$iterations; ex3$burnin; ex3$thin
+ex3$horseshoe
+ex3$prior.args
+
+
+## --- the panel class ---------------------------------------------------------
+##
+##  Shown in section 7.  residuals(), fitted() and predict() take
+##  structural = TRUE/FALSE there rather than type =, the uncorrected benchmark
+##  is $within.coefficients rather than $ols.coefficients, and fixef(),
+##  logLik(), AIC() and BIC() exist only there.
