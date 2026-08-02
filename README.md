@@ -296,6 +296,17 @@ chain.
 
 ---
 
+## Licence
+
+GPL-3. See [`LICENSE`](LICENSE) for the full terms.
+
+In short: the code may be used, modified and redistributed freely, including
+in other packages, provided that derived work stays under the same licence and
+keeps the copyright notice. If you build on it, please also cite the paper the
+estimator comes from.
+
+---
+
 ## References
 
 Arellano, M. (1993). On the testing of correlated effects with panel data.
