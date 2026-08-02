@@ -1,0 +1,74 @@
+cff-version: 1.2.0
+title: "Copula-based endogeneity corrections in R"
+message: >-
+  If you use this software, please cite it using the metadata below, and in
+  addition cite the paper the estimator you used comes from. The papers are
+  listed under references.
+type: software
+authors:
+  - family-names: Haschka
+    given-names: Rouven E.
+    orcid: "https://orcid.org/0000-0002-2916-9745"
+repository-code: "https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections"
+url: "https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections"
+abstract: >-
+  Instrument-free corrections for endogenous regressors in linear models,
+  using the Gaussian copula to model the dependence between the regressors
+  and the structural error. Implements eight estimators behind one interface,
+  by augmented least squares, maximum likelihood, or MCMC.
+keywords:
+  - endogeneity
+  - Gaussian copula
+  - instrument-free identification
+  - control function
+  - panel data
+  - Bayesian inference
+  - R
+license: GPL-3.0-or-later
+version: 1.0.0
+date-released: "2026-08-02"
+
+references:
+  - type: article
+    title: >-
+      Handling endogenous regressors using copulas: A generalization to linear
+      panel models with fixed effects and correlated regressors
+    authors:
+      - family-names: Haschka
+        given-names: Rouven E.
+        orcid: "https://orcid.org/0000-0002-2916-9745"
+    journal: "Journal of Marketing Research"
+    volume: 59
+    issue: 4
+    start: 861
+    end: 880
+    year: 2022
+    notes: "The estimator behind CopRegPANEL()"
+
+  - type: article
+    title: >-
+      Robustness of copula-correction models in causal analysis: Exploiting
+      between-regressor correlation
+    authors:
+      - family-names: Haschka
+        given-names: Rouven E.
+        orcid: "https://orcid.org/0000-0002-2916-9745"
+    journal: "IMA Journal of Management Mathematics"
+    volume: 36
+    issue: 1
+    start: 161
+    end: 180
+    year: 2025
+    notes: "The estimator behind CopRegIMA()"
+
+  - type: article
+    title: >-
+      Bayesian inference for joint estimation models using copulas to handle
+      endogenous regressors
+    authors:
+      - family-names: Haschka
+        given-names: Rouven E.
+        orcid: "https://orcid.org/0000-0002-2916-9745"
+    journal: "Oxford Bulletin of Economics and Statistics"
+    year: 2025
+    notes: "The estimator behind CopRegBAYES()"
