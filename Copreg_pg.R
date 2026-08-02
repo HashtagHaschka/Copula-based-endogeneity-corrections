@@ -12,6 +12,38 @@ if (!exists(".copreg_fit"))
 
 
 ## -----------------------------------------------------------------------------
+##  Copula-based endogeneity corrections in R
+##  https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
+##
+##  Copyright (C) 2026 Rouven E. Haschka
+##  ORCID: https://orcid.org/0000-0002-2916-9745
+##
+##  If this code contributes to work you publish, please cite the software
+##
+##    Haschka, R. E. (2026). Copula-based endogeneity corrections in R.
+##    https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
+##
+##  and the paper this estimator implements
+##
+##    Park, S. and S. Gupta (2012). Handling endogenous regressors by joint
+##      estimation using copulas. Marketing Science 31(4), 567-586.
+##
+##  This program is free software: you can redistribute it and/or modify it
+##  under the terms of the GNU General Public License as published by the Free
+##  Software Foundation, either version 3 of the License, or (at your option)
+##  any later version.
+##
+##  This program is distributed in the hope that it will be useful, but WITHOUT
+##  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+##  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+##  more details.
+##
+##  You should have received a copy of the GNU General Public License along
+##  with this program.  If not, see <https://www.gnu.org/licenses/>.
+## -----------------------------------------------------------------------------
+
+
+## -----------------------------------------------------------------------------
 ##  Copula term constructor
 ## -----------------------------------------------------------------------------
 ##  Park & Gupta add the copula transformation of each endogenous regressor
