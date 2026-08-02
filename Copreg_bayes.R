@@ -223,30 +223,30 @@ if (!exists(".copreg_model"))
 ##  then the correlation matrix of the reconstructed W.
 
 .bayes_draw_W <- function(xi_z, xi_x, xi_e, Omega, pr) {
-  
+
   N <- length(xi_e)
   K <- ncol(xi_z)
   L <- if (is.null(xi_x)) 0L else ncol(xi_x)
-  
+
   Xt <- if (L > 0L) cbind(xi_x, xi_e) else matrix(xi_e, N, 1L)
   St <- crossprod(Xt)
   Sz <- crossprod(xi_z, Xt)
-  
+
   Sxx <- if (L > 0L) .bayes_riwish(pr$nu1 + N, pr$Psi1 + crossprod(xi_x)) else NULL
   se2 <- .bayes_rinvgamma(1, pr$a_e + N / 2, pr$b_e + sum(xi_e^2) / 2)
-  
+
   Vb <- chol2inv(chol(pr$V0inv + St))
   Vb <- (Vb + t(Vb)) / 2
   Mb <- (pr$M0 %*% pr$V0inv + Sz) %*% Vb
   C  <- Mb + t(chol(Omega)) %*% matrix(stats::rnorm(K * (L + 1L)), K, L + 1L) %*%
     chol(Vb)
-  
+
   R     <- xi_z - Xt %*% t(C)
   Omega <- .bayes_riwish(pr$nu2 + N, pr$Psi2 + crossprod(R))
-  
+
   Bx <- C[, seq_len(L), drop = FALSE]
   be <- C[, L + 1L, drop = FALSE]
-  
+
   W11 <- Omega + se2 * tcrossprod(be)
   if (L > 0L) W11 <- W11 + Bx %*% Sxx %*% t(Bx)
   W13 <- se2 * be
@@ -258,7 +258,7 @@ if (!exists(".copreg_model"))
   } else {
     rbind(cbind(W11, W13), cbind(t(W13), se2))
   }
-  
+
   s <- sqrt(diag(W))
   list(Sigma = W / outer(s, s), Omega = Omega)
 }
@@ -280,14 +280,14 @@ if (!exists(".copreg_model"))
 
 .bayes_sampler <- function(y, X, cop, mgs, iterations, burnin, thin,
                            horseshoe, pr, start, verbose) {
-  
+
   N  <- length(y)
   p  <- ncol(X)
   K  <- length(cop$endo)
   L  <- length(cop$exog)
   d  <- K + L + 1L
   ci <- seq_len(d - 1L)                       # copula columns other than e
-  
+
   ndraw <- length(seq.int(burnin + 1L, iterations, by = thin))
   out <- list(
     coefficients = matrix(NA_real_, ndraw, p, dimnames = list(NULL, colnames(X))),
@@ -296,14 +296,14 @@ if (!exists(".copreg_model"))
     lambda       = lapply(mgs, function(m) matrix(NA_real_, ndraw, m$m)),
     accept       = c(coefficients = 0, sigma2 = 0))
   names(out$lambda) <- names(mgs)
-  
+
   cf   <- start$coefficients
   s2   <- start$sigma2
   Sig  <- start$Sigma
   lam  <- start$lambda
   phi2 <- start$phi2
   Om   <- diag(K)
-  
+
   ## The same progress bar the bootstrap uses.  It cannot be redrawn on every
   ## iteration here: at 102,000 of them that is 102,000 writes to the console
   ## for a bar some 190 characters wide, which costs more than it shows.
@@ -316,18 +316,18 @@ if (!exists(".copreg_model"))
     pb <- utils::txtProgressBar(min = 0, max = iterations, style = 3)
     on.exit(close(pb), add = TRUE)
   }
-  
+
   for (it in seq_len(iterations)) {
-    
+
     ## --- normal scores of the margins under the current masses --------------
     Xi <- matrix(0, N, d)
     for (j in seq_len(d - 1L)) Xi[, j] <- .bayes_xi(lam[[j]], mgs[[j]])
-    
+
     Sinv <- chol2inv(chol(Sig))
     A    <- Sinv - diag(d)
     q    <- as.vector(Xi[, ci, drop = FALSE] %*% A[ci, d])
     aee  <- A[d, d]
-    
+
     ## --- Metropolis-Hastings for the regression coefficients ---------------
     ## IWLS proposal.  The working weight is the exact observed information
     ## per observation, (Sigma^{-1})_{dd} / sigma^2, so the proposal covariance
@@ -337,14 +337,14 @@ if (!exists(".copreg_model"))
     sg <- sqrt(s2)
     nu <- (q + aee * e / sg) / sg + e / s2
     Rp <- chol(chol2inv(chol((Sinv[d, d] / s2) * crossprod(X))))
-    
+
     mu  <- cf + as.vector(crossprod(Rp, Rp %*% crossprod(X, nu)))
     cfp <- .bayes_rmvn(mu, Rp)
-    
+
     ep  <- y - as.vector(X %*% cfp)
     nup <- (q + aee * ep / sg) / sg + ep / s2
     mup <- cfp + as.vector(crossprod(Rp, Rp %*% crossprod(X, nup)))
-    
+
     la <- .bayes_lpost(cfp, s2, y, X, q, aee, pr, horseshoe, phi2) -
       .bayes_lpost(cf, s2, y, X, q, aee, pr, horseshoe, phi2) +
       .bayes_dmvn(cf, mup, Rp) - .bayes_dmvn(cfp, mu, Rp)
@@ -352,11 +352,11 @@ if (!exists(".copreg_model"))
       cf <- cfp
       out$accept[["coefficients"]] <- out$accept[["coefficients"]] + 1
     }
-    
+
     ## --- Gibbs for the coefficient variances, normal prior only ------------
     if (!horseshoe)
       phi2 <- .bayes_rinvgamma(p, pr$a_phi + 0.5, pr$b_phi + cf^2 / 2)
-    
+
     ## --- Metropolis-Hastings for log sigma^2 -------------------------------
     tau <- log(s2)
     dv  <- .bayes_tau_derivs(cf, s2, y, X, q, aee, pr)
@@ -364,11 +364,11 @@ if (!exists(".copreg_model"))
     mc  <- tau + Pc * dv$score
     tp  <- stats::rnorm(1, mc, sqrt(Pc))
     s2p <- exp(tp)
-    
+
     dvp <- .bayes_tau_derivs(cf, s2p, y, X, q, aee, pr)
     Pp  <- if (dvp$f2 < -1e-12) -1 / dvp$f2 else 1
     mp  <- tp + Pp * dvp$score
-    
+
     la <- .bayes_lpost(cf, s2p, y, X, q, aee, pr, horseshoe, phi2) -
       .bayes_lpost(cf, s2, y, X, q, aee, pr, horseshoe, phi2) +
       stats::dnorm(tau, mp, sqrt(Pp), log = TRUE) -
@@ -378,7 +378,7 @@ if (!exists(".copreg_model"))
       s2 <- s2p
       out$accept[["sigma2"]] <- out$accept[["sigma2"]] + 1
     }
-    
+
     ## --- Gibbs for W, hence Sigma ------------------------------------------
     ## xi_e is e / sigma directly.  Routing it through qnorm(pnorm(e, sd = s))
     ## is the same number in exact arithmetic but returns +-Inf once |e/sigma|
@@ -389,12 +389,12 @@ if (!exists(".copreg_model"))
                          Xi[, d], Om, pr)
     Sig <- dw$Sigma
     Om  <- dw$Omega
-    
+
     ## --- Gibbs for the masses ----------------------------------------------
     Rs <- chol(Sig)
     U  <- stats::pnorm(matrix(stats::rnorm(N * d), N, d) %*% Rs)
     for (j in seq_len(d - 1L)) lam[[j]] <- .bayes_draw_lambda(U[, j], mgs[[j]])
-    
+
     ## --- store -------------------------------------------------------------
     if (it == nxt) {
       keep <- keep + 1L
@@ -404,11 +404,11 @@ if (!exists(".copreg_model"))
       for (j in seq_len(d - 1L)) out$lambda[[j]][keep, ] <- lam[[j]]
       nxt <- nxt + thin
     }
-    
+
     if (verbose && (it %% step == 0L || it == iterations))
       utils::setTxtProgressBar(pb, it)
   }
-  
+
   out$accept <- out$accept / iterations
   out
 }
@@ -463,9 +463,9 @@ CopRegBAYES <- function(formula, data,
                         contrasts = NULL,
                         verbose = interactive(),
                         cdf, ties, nboots) {
-  
+
   cl <- match.call()
-  
+
   if (!missing(cdf) || !missing(ties))
     stop("The Bayesian approach estimates the marginal CDFs rather than ",
          "plugging them in: the\n  probability masses defining them are ",
@@ -474,31 +474,31 @@ CopRegBAYES <- function(formula, data,
   if (!missing(nboots))
     stop("Inference here is posterior rather than bootstrap. Use 'iterations',",
          " 'burnin' and\n  'thin' instead of 'nboots'.", call. = FALSE)
-  
+
   iterations <- as.integer(iterations)
   burnin     <- as.integer(burnin)
   thin       <- as.integer(thin)
   if (burnin >= iterations)
     stop("'burnin' must be smaller than 'iterations'.", call. = FALSE)
   if (thin < 1L) stop("'thin' must be at least 1.", call. = FALSE)
-  
+
   info <- .copreg_model(formula, data, subset, contrasts)
   X <- info$X; y <- info$y
   N <- length(y); p <- ncol(X)
-  
+
   ## --- which columns enter the copula, in the order z, x, e -----------------
   endo <- info$endo_cols
   exog <- setdiff(info$exo_cols, if (info$has_intercept) 1L else integer(0))
   K <- length(endo); L <- length(exog)
   if (K < 1L) stop("No endogenous regressor found.", call. = FALSE)
-  
+
   const <- vapply(c(endo, exog), function(j) length(unique(X[, j])) < 2L,
                   logical(1))
   if (any(const))
     stop("Regressor(s) with a single unique value cannot enter the copula: ",
          paste(colnames(X)[c(endo, exog)][const], collapse = ", "),
          ".\n  A constant carries no distributional information.", call. = FALSE)
-  
+
   ## P for the endogenous regressors, W for the exogenous ones and xi for the
   ## structural error, as everywhere else in the toolbox; the paper writes
   ## z, x and e for the same three things.  The stars mark normal scores:
@@ -509,7 +509,7 @@ CopRegBAYES <- function(formula, data,
   mgs <- lapply(c(endo, exog), function(j) .bayes_margin(X[, j]))
   names(mgs) <- colnames(X)[c(endo, exog)]
   d <- K + L + 1L
-  
+
   ## --- hyperparameters, defaults as in the paper ---------------------------
   pr <- list(a = 0.001, b = 0.001,                       # sigma^2, Equation (7)
              a_phi = 0.001, b_phi = 0.001,               # normal prior variance
@@ -530,14 +530,14 @@ CopRegBAYES <- function(formula, data,
     pr[names(prior.args)] <- prior.args
   }
   pr$V0inv <- chol2inv(chol(pr$V0))
-  
+
   ## --- starting values, Web Appendix D --------------------------------------
   ols <- stats::lm.fit(X, y)
   st <- list(coefficients = unname(ols$coefficients),
              sigma2 = sum(ols$residuals^2) / max(1L, N - p),
              Sigma = diag(d),
              lambda = lapply(mgs, function(m)
-             { g <- stats::rgamma(m$m, 1); g / sum(g) }),
+               { g <- stats::rgamma(m$m, 1); g / sum(g) }),
              phi2 = rep(1000, p))
   start <- start[!vapply(start, is.null, logical(1))]
   if (length(start) > 0L) {
@@ -551,28 +551,47 @@ CopRegBAYES <- function(formula, data,
     stop("The design matrix is rank deficient, so OLS gives no starting ",
          "values.\n  Drop the collinear column(s) or supply 'start'.",
          call. = FALSE)
-  
+
   if (verbose)
     message("Sampling ", format(iterations, big.mark = ","), " iterations, ",
             "keeping ", length(seq.int(burnin + 1L, iterations, by = thin)),
             " draws ...")
-  
+
   fit <- .bayes_sampler(y, X, cop, mgs, iterations, burnin, thin,
                         horseshoe, pr, st, verbose)
-  
+
   ## --- labels for the free elements of Sigma --------------------------------
   ij <- which(lower.tri(diag(d)), arr.ind = TRUE)
   colnames(fit$Sigma) <- paste0("rho(", cop$names[ij[, 2L]], "*, ",
                                 cop$names[ij[, 1L]], "*)")
   free <- !(ij[, 2L] > K & ij[, 2L] < d & ij[, 1L] == d)
-  
+
   draws <- cbind(fit$coefficients, sigma2 = fit$sigma2,
                  fit$Sigma[, free, drop = FALSE])
-  
+
+  ## A stuck parameter is a warning sign about the run, so it is raised here
+  ## rather than waiting for validity() to be called.  An acceptance rate near
+  ## zero says the same thing about the whole vector at once: the Metropolis
+  ## step is proposing moves that are never taken, and the draws describe a
+  ## point rather than a posterior.
+  frozen <- colnames(draws)[apply(draws, 2, function(v) all(v == v[1L]))]
+  if (length(frozen) > 0L)
+    warning("The chain never moved for: ", paste(frozen, collapse = ", "),
+            ".\n  These draws describe a single point, not a posterior. ",
+            "Check the trace with\n  plot(fit, which = ", deparse(frozen[1L]),
+            ", type = \"trace\") before reading anything off them.",
+            call. = FALSE)
+  if (fit$accept[["coefficients"]] < 0.01)
+    warning("The coefficients were accepted in only ",
+            formatC(100 * fit$accept[["coefficients"]], format = "f",
+                    digits = 2), "% of iterations.\n  The sampler is barely ",
+            "moving; the draws are unlikely to represent the posterior.",
+            call. = FALSE)
+
   cf <- colMeans(fit$coefficients)
   names(cf) <- colnames(X)
   fitted <- as.vector(X %*% cf)
-  
+
   structure(list(
     coefficients = cf,
     posterior.median = apply(fit$coefficients, 2, stats::median),
@@ -721,10 +740,10 @@ predict.copregbayes <- function(object, newdata = NULL, ...) {
 plot.copregbayes <- function(x, which = NULL,
                              type = c("trace", "acf", "pacf", "density", "cdf"),
                              level = 0.95, ask = NULL, ...) {
-  
+
   type <- match.arg(type)
   op <- graphics::par(no.readonly = TRUE); on.exit(graphics::par(op))
-  
+
   if (type == "cdf") {
     nm <- names(x$lambda.draws)
     if (is.null(which)) which <- x$endo.names
@@ -754,7 +773,7 @@ plot.copregbayes <- function(x, which = NULL,
     }
     return(invisible(x))
   }
-  
+
   nm <- colnames(x$draws)
   if (is.null(which)) which <- x$endo.names
   if (is.numeric(which)) which <- nm[which]
@@ -762,7 +781,7 @@ plot.copregbayes <- function(x, which = NULL,
   if (length(bad) > 0L)
     stop("Not a parameter of this model: ", paste(bad, collapse = ", "),
          ".\n  Available: ", paste(nm, collapse = ", "), ".", call. = FALSE)
-  
+
   if (is.null(ask)) ask <- length(which) > 1L && grDevices::dev.interactive()
   graphics::par(ask = ask)
   for (v in which) {
@@ -774,9 +793,9 @@ plot.copregbayes <- function(x, which = NULL,
            acf     = stats::acf(d, main = paste("ACF of", v), ...),
            pacf    = stats::pacf(d, main = paste("PACF of", v), ...),
            density = { dd <- stats::density(d)
-           graphics::plot(dd, xlab = v,
-                          main = paste("Posterior of", v), ...)
-           graphics::abline(v = mean(d), lty = 2) })
+                       graphics::plot(dd, xlab = v,
+                                      main = paste("Posterior of", v), ...)
+                       graphics::abline(v = mean(d), lty = 2) })
   }
   invisible(x)
 }
@@ -818,12 +837,25 @@ plot.copregbayes <- function(x, which = NULL,
   (mean(a) - mean(b)) / sqrt(se)
 }
 
+## Effective sample size by the initial positive sequence: sum the sample
+## autocorrelations up to the first negative one and stop there.
+##
+## The truncation has to fire when the FIRST autocorrelation is already
+## negative, which is the hardest truncation of all -- no lags at all, so
+## ESS = n.  Excluding that case leaves the whole sequence out to lag
+## floor(10 log10 n) in the sum, noise terms included, and 1 + 2 sum(r) can
+## then approach zero from above and send the estimate far past n.  For a well
+## mixing chain the sign of the lag-one estimate is close to a coin flip, so
+## this is the common case rather than a corner: the diagnostic was least
+## reliable exactly where the chain was best behaved, and it erred towards
+## claiming more precision than there was.
 .bayes_ess <- function(v) {
   n <- length(v)
   m <- max(1L, floor(10 * log10(n)))
   r <- stats::acf(v, lag.max = m, plot = FALSE)$acf[-1L]
+  if (!all(is.finite(r))) return(NA_real_)      # a series that never moved
   k <- which(r < 0)[1L]
-  if (!is.na(k) && k > 1L) r <- r[seq_len(k - 1L)]
+  if (!is.na(k)) r <- r[seq_len(k - 1L)]
   max(1, n / (1 + 2 * sum(r)))
 }
 
@@ -846,28 +878,45 @@ plot.copregbayes <- function(x, which = NULL,
 
 validity.copregbayes <- function(object, chains = FALSE, power = 0.8,
                                  verbose = interactive(), ...) {
-  
+
   nz <- .validity_nonnormality(object$X[, object$endo.names, drop = FALSE],
                                object$endo.names, object$n, power)
-  
+
   ## posterior of the endogeneity correlations, one per endogenous regressor
   ze <- object$rho.names[object$rho.names %in% colnames(object$draws)]
   rho <- t(apply(object$draws[, ze, drop = FALSE], 2, function(v)
     c(`P. Mean` = mean(v), `2.5%` = unname(stats::quantile(v, 0.025)),
       `97.5%` = unname(stats::quantile(v, 0.975)),
       `P(rho > 0)` = mean(v > 0))))
-  
+
   conv <- data.frame(
     Geweke = apply(object$draws, 2, .bayes_geweke),
     ESS    = apply(object$draws, 2, .bayes_ess),
-    `AC(1)` = apply(object$draws, 2, function(v)
-      stats::acf(v, lag.max = 1, plot = FALSE)$acf[2L]),
+    `AC(1)` = apply(object$draws, 2, function(v) {
+      a <- stats::acf(v, lag.max = 1, plot = FALSE)$acf[2L]
+      if (is.finite(a)) a else NA_real_
+    }),
     check.names = FALSE)
-  
+
+  ## A parameter whose draws never move is not a missing diagnostic, it is a
+  ## finding: the Metropolis step never accepted for it.  The three columns
+  ## above are all NA for such a parameter -- acf() of a constant is NaN --
+  ## so without naming it the row would read as though something merely could
+  ## not be computed.
+  stuck <- colnames(object$draws)[
+    apply(object$draws, 2, function(v) all(v == v[1L]))]
+
   gr <- NULL
   if (!isFALSE(chains)) {
     nc <- if (isTRUE(chains)) 4L else as.integer(chains)
     if (nc < 2L) stop("Gelman-Rubin needs at least two chains.", call. = FALSE)
+    ## The caller's frame has to be taken here, in validity()'s own body.
+    ## Inside the lapply() below, parent.frame() would be the frame of the
+    ## lapply() call instead, and the refit would look for the model's data
+    ## anywhere but where it lives -- so it worked only when the data happened
+    ## to be a global variable, and silently used the wrong object when a
+    ## global of the same name existed.
+    where <- parent.frame()
     cl <- object$call
     cl$verbose <- verbose
     se <- object$std.error
@@ -881,8 +930,8 @@ validity.copregbayes <- function(object, chains = FALSE, power = 0.8,
                                     object$coefficients, se),
         Sigma = .bayes_rlkj(length(object$copula.names)),
         lambda = lapply(object$margins, function(m)
-        { g <- stats::rgamma(m$m, 1); g / sum(g) }))
-      eval(cl, parent.frame())$draws
+          { g <- stats::rgamma(m$m, 1); g / sum(g) }))
+      eval(cl, where)$draws
     })
     reps <- c(list(object$draws), reps)
     n <- nrow(reps[[1L]]); M <- length(reps)
@@ -895,9 +944,10 @@ validity.copregbayes <- function(object, chains = FALSE, power = 0.8,
     }, numeric(1))
     names(gr) <- colnames(object$draws)
   }
-  
+
   structure(list(nonnormality = nz$table, thresholds = nz$thresholds,
                  endogeneity = rho, convergence = conv, gelman.rubin = gr,
+                 stuck = stuck,
                  acceptance = object$acceptance, ndraws = object$ndraws,
                  endo.names = object$endo.names),
             class = "copregbayes.validity")
@@ -908,30 +958,35 @@ print.copregbayes.validity <- function(x, digits = max(3L, getOption("digits") -
                                        ...) {
   i <- 0L; nxt <- function() paste0("[", i <<- i + 1L, "] ")
   cat("\nChecks for the Bayesian copula correction\n")
-  
+
   cat("\n", nxt(), "Nonnormality of the endogenous regressors\n", sep = "")
   cat("    Identification comes from the nonlinearity of E(e|z), which is\n",
       "    present only when z is nonnormal; under normality the copula cannot\n",
       "    tell regressor variation from error variation.\n", sep = "")
   print(format(x$nonnormality, digits = digits))
-  
+
   cat("\n", nxt(), "Posterior of the endogeneity correlations\n", sep = "")
   print(format(x$endogeneity, digits = digits), quote = FALSE)
   cat("    An interval covering zero says the data carry no evidence of\n",
       "    endogeneity, which is the honest reading; it is not a test decision.\n",
       sep = "")
-  
+
   cat("\n", nxt(), "Convergence of the chain\n", sep = "")
   cat("    Geweke compares the first tenth with the last half of the draws and\n",
       "    is a z statistic, so |Geweke| > 2 is a warning sign. ESS is the\n",
       "    effective number of independent draws behind ", x$ndraws,
       " retained ones.\n", sep = "")
   print(format(x$convergence, digits = digits))
+  if (length(x$stuck) > 0L)
+    cat("    The chain never moved for: ", paste(x$stuck, collapse = ", "),
+        ".\n    That is why those rows are NA, and it is a finding rather than",
+        " a gap:\n    the sampler is not exploring the posterior of these",
+        " parameters at all.\n", sep = "")
   cat("    Acceptance rates: ",
       paste0(names(x$acceptance), " ",
              formatC(x$acceptance, format = "f", digits = 3), collapse = ", "),
       "\n", sep = "")
-  
+
   if (!is.null(x$gelman.rubin)) {
     cat("\n", nxt(), "Gelman-Rubin from dispersed starts\n", sep = "")
     print(format(x$gelman.rubin, digits = digits), quote = FALSE)
@@ -942,7 +997,7 @@ print.copregbayes.validity <- function(x, digits = max(3L, getOption("digits") -
         "    further run of the sampler per chain. Pass chains = TRUE, or a\n",
         "    number, to compute it.\n", sep = "")
   }
-  
+
   cat("\nSource: Haschka (2025), Oxford Bulletin of Economics and Statistics\n")
   invisible(x)
 }
