@@ -296,14 +296,36 @@ chain.
 
 ---
 
+## How to cite
+
+If this code contributes to work you publish, please cite **both** the software
+and the paper behind the estimator you used. `CITATION.cff` in this repository
+holds the metadata, so GitHub's *Cite this repository* button will format it
+for you.
+
+```
+Haschka, R. E. (2026). Copula-based endogeneity corrections in R.
+https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
+ORCID: https://orcid.org/0000-0002-2916-9745
+```
+
+The estimator papers are listed in full under References below. Which one
+applies depends on the function: `CopRegPANEL()` is Haschka (2022),
+`CopRegIMA()` is Haschka (2025a), `CopRegBAYES()` is Haschka (2025b), and the
+remaining five implement the papers of Park & Gupta, Yang, Qian & Xie, Hu,
+Qian & Xie, Breitung, Mayer & Wied, and Liengaard et al. respectively.
+
+---
+
 ## Licence
 
-GPL-3. See [`LICENSE`](LICENSE) for the full terms.
+GPL-3 or later. See [`LICENSE`](LICENSE) for the full terms.
 
 In short: the code may be used, modified and redistributed freely, including
-in other packages, provided that derived work stays under the same licence and
-keeps the copyright notice. If you build on it, please also cite the paper the
-estimator comes from.
+inside other packages, provided that derived work stays under the same licence
+and keeps the copyright notice intact. Note that the licence governs
+redistribution of the code, not academic credit; the citation request above is
+a scholarly convention rather than a licence condition.
 
 ---
 
