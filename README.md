@@ -40,8 +40,11 @@ gh <- paste0("https://raw.githubusercontent.com/HashtagHaschka/",
 for (f in c("Copreg_core.R",        # the core has to come first
             "Copreg_pg.R", "Copreg_2scope.R", "Copreg_ima.R",
             "Copreg_jams.R", "Copreg_bmw.R", "Copreg_2scope_np.R",
-            "Copreg_panel.R", "Copreg_bayes.R"))
-  source(paste0(gh, f))
+            "Copreg_panel.R", "Copreg_bayes.R")) {
+  tmp <- file.path(tempdir(), f)
+  download.file(paste0(gh, f), tmp, quiet = TRUE, mode = "wb")
+  source(tmp)
+}
 ```
 
 `Copreg_core.R` holds the shared machinery — formula handling, the CDF
@@ -319,13 +322,22 @@ Qian & Xie, Breitung, Mayer & Wied, and Liengaard et al. respectively.
 
 ## Licence
 
-GPL-3 or later. See [`LICENSE`](LICENSE) for the full terms.
+GPL-3 or later, with one additional term. The full licence text is in
+[`LICENSE`](LICENSE); the additional term is stated at the top of every source
+file, which is where section 7 of the GPL requires it to be.
 
-In short: the code may be used, modified and redistributed freely, including
-inside other packages, provided that derived work stays under the same licence
-and keeps the copyright notice intact. Note that the licence governs
-redistribution of the code, not academic credit; the citation request above is
-a scholarly convention rather than a licence condition.
+The code may be used, modified, redistributed and sold freely, including
+inside other packages. Two things travel with it. The licence itself requires
+that derived work stay under the same licence and keep the copyright notices
+intact. The additional term, permitted by section 7(b), requires that the
+author attribution be preserved in anything conveying this material, a package
+built on it included.
+
+The citation request in those headers is a request and says so. A copyright
+licence governs the copying, modification and distribution of code, not how
+scholarly work is credited; no licence can oblige the users of a downstream
+package to cite anyone. What the attribution term does achieve is that they
+can see whom to credit.
 
 ---
 
