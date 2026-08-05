@@ -11,7 +11,6 @@
 if (!exists(".copreg_fit"))
   stop("Source copreg-core.R before this file.")
 
-
 ## -----------------------------------------------------------------------------
 ##  Copula-based endogeneity corrections in R
 ##  https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
@@ -19,7 +18,26 @@ if (!exists(".copreg_fit"))
 ##  Copyright (C) 2026 Rouven E. Haschka
 ##  ORCID: https://orcid.org/0000-0002-2916-9745
 ##
-##  If this code contributes to work you publish, please cite the software
+##  This program is free software: you can redistribute it and/or modify it
+##  under the terms of the GNU General Public License as published by the Free
+##  Software Foundation, either version 3 of the License, or (at your option)
+##  any later version.
+##
+##  Additional term under section 7(b) of that licence: you must preserve the
+##  author attribution above in any material you convey, and in the notices
+##  displayed by works containing it. This applies to modified versions and to
+##  larger works that incorporate this material, other R packages included.
+##
+##  This program is distributed in the hope that it will be useful, but WITHOUT
+##  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+##  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+##  more details.
+##
+##  You should have received a copy of the GNU General Public License along
+##  with this program.  If not, see <https://www.gnu.org/licenses/>.
+##
+##  Citation, a request rather than a licence condition. If this code
+##  contributes to work you publish, please cite the software
 ##
 ##    Haschka, R. E. (2026). Copula-based endogeneity corrections in R.
 ##    https://github.com/HashtagHaschka/Copula-based-endogeneity-corrections
@@ -30,19 +48,6 @@ if (!exists(".copreg_fit"))
 ##      and C. M. Ringle (2025). Dealing with regression models' endogeneity by
 ##      means of an adjusted estimator for the Gaussian copula approach.
 ##      Journal of the Academy of Marketing Science 53, 279-299.
-##
-##  This program is free software: you can redistribute it and/or modify it
-##  under the terms of the GNU General Public License as published by the Free
-##  Software Foundation, either version 3 of the License, or (at your option)
-##  any later version.
-##
-##  This program is distributed in the hope that it will be useful, but WITHOUT
-##  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-##  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-##  more details.
-##
-##  You should have received a copy of the GNU General Public License along
-##  with this program.  If not, see <https://www.gnu.org/licenses/>.
 ## -----------------------------------------------------------------------------
 
 
